@@ -7,7 +7,7 @@ function realign_bs_physio(all_sub_ids)
 [path,vars]  = get_study_specs;
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
-run_parallel = 0;
+run_parallel = 1;
 
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
