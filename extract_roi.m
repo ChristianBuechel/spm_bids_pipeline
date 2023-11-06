@@ -38,16 +38,3 @@ end
 %==========================================================================
 roi_f = spm_file(V_epi(1).fname,'ext','.mat','prefix',fname);
 save(roi_f,'roi');
-
-
-function y = get_roi_ts(xY,V_epi, V_wmean_scan, N_back_scan)
-[~, XYZmm, ~] = spm_ROI(xY, V_wmean_scan); % get the voxels in the image
-
-% to account for the nonlin coreg we have to sample from the
-% deformation field
-%[oXYZvox, oXYZmm]  = transform_back([[-28 -57 15]' [31 -53 15]'], V_wmean_scan, V_epi(1), N_back_scan); %just one coord for debugging
-
-[oXYZvox, ~]  = transform_back(XYZmm, V_wmean_scan, V_epi(1), N_back_scan);
-
-y         = spm_get_data(V_epi,oXYZvox); % get relevant EPI time-series
-y         = y(:,any(y)); % prune out zero time-series
