@@ -1,4 +1,4 @@
-function firstlevel(all_sub_ids)
+function analyses(all_sub_ids)
 % example for a 1st löevel and secopnd löevel anaylsis function
 
 % resolve paths
@@ -35,7 +35,7 @@ end
 
 sm_str            = num2str(skernel(1));
 if ana == 3
-    do_lss            = 1;  % also do an LSS analysis ?
+    do_lss            = analysis.lss;  % also do an LSS analysis ?
 else
     do_lss            = 0; % never for hrf and fir
 end
@@ -183,7 +183,7 @@ for sub = 1:n_subs
         template.spm.stats.fmri_spec.bases.fir.length = TR*n_base;
         template.spm.stats.fmri_spec.bases.fir.order  = n_base;
         
-    elseif ana == 2 % HRF
+    elseif ana == 2 || ana == 3 % HRF (also for LSA LSS)
         template.spm.stats.fmri_spec.bases.hrf.derivs = [0 0];
     end
     
@@ -194,11 +194,19 @@ for sub = 1:n_subs
     
     for run = 1:n_run
         % first get the nuisance vectors (movement, wm, csf etc)
-        fm        = spm_file(path.epifiles{run},'prefix','rp_a','ext','.txt');
+        if bs == 1
+            fm        = spm_file(path.epifiles{run},'prefix','rp_ba','ext','.txt');
+        else
+            fm        = spm_file(path.epifiles{run},'prefix','rp_a','ext','.txt');
+        end
         movement  = normit(load(char(fm)));
         physio_noise_f = char(spm_file(path.epifiles{run},'prefix','physio_','ext','.mat'));
         if exist(physio_noise_f,'file')
             physio_noise = load(physio_noise_f);
+        end
+        seg_noise_bs_f = char(spm_file(path.epifiles{run},'prefix','noise_csf_bra','ext','.mat'));
+        if exist(seg_noise_bs_f,'file')
+            seg_noise_bs = load(seg_noise_bs_f);
         end
         seg_noise_f = char(spm_file(path.epifiles{run},'prefix','noise_wm_csf_ra','ext','.mat'));
         if exist(seg_noise_f,'file')
@@ -227,11 +235,13 @@ for sub = 1:n_subs
         if strfind(noise_corr,'wm')
             all_nuis{run} = [all_nuis{run} normit(seg_noise.segment(1).data)];
         end
-        
         if strfind(noise_corr,'csf')
-            all_nuis{run} = [all_nuis{run} normit(seg_noise.segment(2).data)];
+            if bs == 1
+                all_nuis{run} = [all_nuis{run} normit(seg_noise_bs.segment(1).data)];
+            else
+                all_nuis{run} = [all_nuis{run} normit(seg_noise.segment(2).data)];
+            end
         end
-        
         if strfind(noise_corr,'roi')
             all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(1).data)];
             all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(2).data)];
@@ -432,6 +442,9 @@ for sub = 1:n_subs
         total_cond = items;
     end
     if ana == 3
+        if concatenate == 1
+            cond_use{1} = 1:numel(new_t.spm.stats.fmri_spec.sess(1).cond);
+        end
         total_cond = 1:max(cond_use{n_run});
     end
     f_vec = []; % here we construct the effects of int contrast (complicated because not all conds could be present in all runs)
@@ -577,6 +590,8 @@ if do_one_t
     pruned_add_con_ind(c) = [];
     for co = 1:size(pruned_t_con_names,2)
         out_dir = fullfile(path.secondlevelDir,[addon '_' anadirname '_' sm_str '_' pruned_t_con_names{co}]);
+        out_dir = strrep(out_dir,'>','_bt_');
+        out_dir = strrep(out_dir,'<','_st_');
         mkdir(out_dir);
         
         matlabbatch = [];

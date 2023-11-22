@@ -29,6 +29,9 @@ for sub = 1:n_subs
             end
             if exist(char(spm_file(epi,'prefix','rp_a','ext','.txt')),'file') %assume original realign
                 movefile(char(spm_file(epi,'prefix','rp_a','ext','.txt')),char(spm_file(epi,'prefix','brain_rp_a','ext','.txt')))
+            end            
+            if exist(char(spm_file(epi,'prefix','meana')),'file') %assume original realign
+                movefile(char(spm_file(epi,'prefix','meana')),char(spm_file(epi,'prefix','brain_meana')));
             end
             
             run_niftis         =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^a'),Inf);
@@ -38,7 +41,7 @@ for sub = 1:n_subs
     end
     func_dir   = spm_file(epi,'path');
     % fill with default options
-    gi  = 1;
+    gi  = 1;    
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.data             = all_niftis;
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.eoptions.quality = 0.9;
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.eoptions.sep     = 3;
@@ -47,13 +50,12 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.eoptions.interp  = 3;
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.eoptions.wrap    = [0 0 0];
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.eoptions.weight  = fullfile(func_dir,'bins3cbrainstem_mask.nii');
-    matlabbatch{gi,sub}.spm.spatial.realign.estwrite.roptions.which   = [2 0]; %all images, no mean
+    matlabbatch{gi,sub}.spm.spatial.realign.estwrite.roptions.which   = [2 1]; %all images, no mean
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.roptions.interp  = 4;
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.roptions.wrap    = [0 0 0];
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.roptions.mask    = 1; % if set to 1 takes out people who move out of FOV
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.roptions.prefix  = 'br';
     gi = gi + 1;
-    
     
     for ses = 1:vars.nSess
         for run = 1:vars.nRuns
@@ -73,7 +75,13 @@ for sub = 1:n_subs
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.unique = false;
             gi = gi + 1;
             
-           
+            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(epi,'prefix','meana'); %rename mean to bs_mean
+            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;
+            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.pattern = 'meana';
+            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.repl = 'bs_meana';
+            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.unique = false;
+            gi = gi + 1;
+                        
             if exist(char(spm_file(epi,'prefix','brain_a','ext','.mat')),'file') % restore original rp*txt files
                 matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(epi,'prefix','brain_a','ext','.mat');
                 matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;
@@ -88,6 +96,15 @@ for sub = 1:n_subs
                 matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;
                 matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.pattern = 'brain_rp_a';
                 matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.repl = 'rp_a';
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.unique = false;
+                gi = gi + 1;
+            end
+            
+            if exist(char(spm_file(epi,'prefix','brain_meana')),'file') % restore original mean file
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(epi,'prefix','brain_meana');
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.pattern = 'brain_meana';
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.repl = 'meana';
                 matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.unique = false;
                 gi = gi + 1;
             end

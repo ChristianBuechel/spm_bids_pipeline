@@ -39,7 +39,9 @@ for i=1:n_rois
     V_part.pinfo(1) = 1; % scale factor dtype now double so = 1
     V_part.pinfo(3) = 0; % read from .dat
     
-    yy         = get_roi_ts(xY(i),V_part, V_epi, V_wmean_scan, N_back_scan);
+    yy         = get_roi_ts(xY(i), V_epi, V_wmean_scan, N_back_scan, V_part);
+    yy         = yy(:,any(yy)); % prune out zero time-series
+
     segment(i).data = get_pcs(yy,ex_var); % get principal components
     segment(i).name = name{i};
 end
@@ -54,9 +56,10 @@ if ~isempty(interaction)
         xY(i+g).xyz     = Inf;
         xY(i+g).spec    = V_part; %use last file
         
-        yy         = get_roi_ts(xY(i+g),V_part, V_epi, V_wmean_scan, N_back_scan);
+        yy         = get_roi_ts(xY(i+g), V_epi, V_wmean_scan, N_back_scan,V_part);
         segment(i+g).name = xY(i+g).name;
         if size(yy,2)>=ex_var
+            yy = yy(:,any(yy)); % prune out zero time-series
             segment(i+g).data = get_pcs(yy,ex_var); % get principal components
         else
             segment(i+g).data = []; % get principal components
@@ -69,23 +72,3 @@ end
 %==========================================================================
 noise_f = spm_file(V_epi(1).fname,'ext','.mat','prefix',fname);
 save(noise_f,'segment');
-
-
-function y = get_roi_ts(xY,V_part, V_epi, V_wmean_scan, N_back_scan)
-[~, XYZmm, ~] = spm_ROI(xY, V_wmean_scan); % get the voxels in the image
-XYZvoxM       = inv(V_part.mat)*[XYZmm; ones(1,size(XYZmm,2))];
-XYZvoxM       = XYZvoxM(1:3,:); %map mm to vox
-mask          = spm_get_data(V_part,XYZvoxM); %extract voxel values
-prune_ind     = find(mask>xY.thresh); % threshold
-XYZmm         = XYZmm(:,prune_ind); % kickout voxels below threshold
-
-% to account for the nonlin coreg we have to sample from the
-% deformation field
-%[oXYZvox, oXYZmm]  = transform_back([[-28 -57 15]' [31 -53 15]'], V_wmean_scan, V_epi(1), N_back_scan); %just one coord for debugging
-
-[oXYZvox, ~]  = transform_back(XYZmm, V_wmean_scan, V_epi(1), N_back_scan);
-
-y         = spm_get_data(V_epi,oXYZvox); % get relevant EPI time-series
-y         = y(:,any(y)); % prune out zero time-series
-
-

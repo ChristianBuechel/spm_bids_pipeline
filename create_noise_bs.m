@@ -28,13 +28,13 @@ for sub = 1:n_subs
     
     
     
-    thresh = [0.1]; ex_var = 20; %low thzreshold as erosion takes away much of the bs
+    thresh = [0.1]; ex_var = 6; %low threshold as erosion takes away much of the bs
     gi = 1;
     for ses = 1:vars.nSess
         for run = 1:vars.nRuns
             fprintf('ses %d run %d\n',ses,run);
             epi       =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi_files =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^a'),Inf);
+            epi_files =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^bra'),Inf);
             %extract_segment(epi_files,cm_file,epi_2_T1,c_files,[],thresh,ex_var);
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.evaluated = epi_files;
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.string    = char(cm_file);
@@ -43,7 +43,7 @@ for sub = 1:n_subs
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{5}.evaluated = [];
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{6}.evaluated = thresh;
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{7}.evaluated = ex_var;
-            matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{8}.string    = 'noise_bs_csf_';
+            matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{8}.string    = 'noise_csf_';
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'extract_segment';
             gi    = gi + 1;
