@@ -3,8 +3,7 @@ function do_em_all_realign_two_step
 
 % define subjects that should be included
 all_sub_ids  = [5:44]; 
-%all_sub_ids  = [10 21 41]; 
-%all_sub_ids  = [41]; 
+
 
 % perform slice timing correction
 %slice_timing(all_sub_ids);

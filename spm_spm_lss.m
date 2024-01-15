@@ -1,7 +1,13 @@
 function SPM = spm_spm_lss(SPM, lss_ind)
-% fork of spm_spm to quickly do Mumfordian an LS-S analysis from a full
+% fork of spm_spm to quickly do a Mumfordian LS-S analysis from a full
 % LS-A design matrix
-% Single session only
+% Single session only --> not true anymore
+
+% pooling of different events into one regressor (i.e. LSS) is difficult in designs
+% where regerssors are quite different eg different durations ... --> solution:
+% lss_ind is a matrix where the 1st column depicts an index and the 2nd the
+% duration
+
 % The only thing needed is to add the field SPM.lss_ind to SPM
 % here all columns for which we want an LSS beta image are numbered
 % confounds are marked with NaN eg [1 2 3 4 5 NaN NaN NaN NaN NaN NaN]
@@ -15,7 +21,7 @@ function SPM = spm_spm_lss(SPM, lss_ind)
 % This might suffer from long TRs
 %
 % no changes are made to SPM.mat
-% Non-sphericity is assumed to be from the full model and only assessed for
+% Non-sphericity is assumed to be from the full model
 % Best use 'None'
 %
 % FORMAT SPM = spm_spm(SPM)
@@ -317,9 +323,9 @@ end
 %-            C H E C K   F I L E S   A N D   F O L D E R S
 %==========================================================================
 
-if numel(SPM.Sess)>1 %more than 1 session
-    error('SPM.mat should only have a single session');
-end
+% if numel(SPM.Sess)>1 %more than 1 session
+%     error('SPM.mat should only have a single session');
+% end
 
 %-Change directory
 %--------------------------------------------------------------------------
@@ -377,26 +383,26 @@ end
 
 %-Delete files from previous analyses
 %--------------------------------------------------------------------------
-if ~isempty(spm_select('List',SPM.swd,'^lss_mask\..{3}$'))
-    
-    str = {'Current directory contains SPM estimation files:',...
-        'pwd = ',SPM.swd,...
-        'Existing results will be overwritten!'};
-    if spm_input(str,1,'bd','stop|continue',[1,0],1)
-        spm('Pointer','Arrow')
-        return
-    else
-        sw = warning('off','backtrace');
-        warning('Overwriting old results\n\t (pwd = %s) ',SPM.swd);
-        warning(sw);
-        try, SPM.xX  = rmfield(SPM.xX, 'W'); end
-        try,
-            if isfield(SPM.xVi,'Vi') && numel(SPM.xVi.Vi)>1
-                SPM.xVi = rmfield(SPM.xVi, 'V');
-            end
-        end
-    end
-end
+% if ~isempty(spm_select('List',SPM.swd,'^lss_mask\..{3}$'))
+%     
+%     str = {'Current directory contains SPM estimation files:',...
+%         'pwd = ',SPM.swd,...
+%         'Existing results will be overwritten!'};
+%     if spm_input(str,1,'bd','stop|continue',[1,0],1)
+%         spm('Pointer','Arrow')
+%         return
+%     else
+%         sw = warning('off','backtrace');
+%         warning('Overwriting old results\n\t (pwd = %s) ',SPM.swd);
+%         warning(sw);
+%         try, SPM.xX  = rmfield(SPM.xX, 'W'); end
+%         try,
+%             if isfield(SPM.xVi,'Vi') && numel(SPM.xVi.Vi)>1
+%                 SPM.xVi = rmfield(SPM.xVi, 'V');
+%             end
+%         end
+%     end
+% end
 
 files = {'^lss_mask\..{3}$','^lss_beta_.{4}\..{3}$'};
 
@@ -417,7 +423,8 @@ end
 xX             = SPM.xX;
 lss_ind        = SPM.lss_ind;
 [nScan, nBeta] = size(xX.X);
-lss_cond       = lss_ind(isfinite(lss_ind));
+%lss_cond       = lss_ind(isfinite(lss_ind));
+lss_cond       = find(isfinite(lss_ind(1,:)));
 nLss           = numel(lss_cond);
 
 %-Get masking settings
@@ -585,12 +592,21 @@ for i=1:nbchunks
     %======================================================================
     KWY          = spm_filter(xX.K,W*Y);
     
-    confounds    = xX.X(:,~isfinite(SPM.lss_ind));
+    confounds    = xX.X(:,~isfinite(SPM.lss_ind(1,:)));
        
     for l=1:nLss
-        lss_mask = [lss_cond ~= lss_cond(l) zeros(1,size(confounds,2))]; %all other conditions
         
-        xXX_lss = [xX.X(:,l)  xX.X*lss_mask'  confounds]; %we are only interested in the first beta
+        lss_mask = zeros(1,size(xX.X,2));
+        lss_mask(lss_cond) = 1; %all in
+        lss_mask(lss_cond(l)) = 0; %the one of interest out
+        [~,classes,~] = unique(SPM.lss_ind(2,isfinite(SPM.lss_ind(2,:)))); %gets us the # of different durations (Nans behave strange in unique ...)
+        [~,~,types] = unique(SPM.lss_ind(2,:)); % get different durations
+        types(types>max(classes)) = 0; 
+        collapse = [];
+            for t = 1:max(types)
+            collapse = [collapse (xX.X*(lss_mask'.*(types == t)))]; %make as mayn collapsed regressors as there are durations
+        end
+        xXX_lss = [xX.X(:,l) collapse  confounds]; %assemble note, we are only interested in the first beta
         
         %-Design space and projector matrix [pseudoinverse] for WLS
         %--------------------------------------------------------------------------
@@ -644,7 +660,7 @@ end
 
 
 SPM.Vbeta_lss  = SPM.Vbeta; % copy ...  
-SPM.Vbeta_lss(isfinite(SPM.lss_ind)) = Vbeta; % ...and insert lss_betas
+SPM.Vbeta_lss(isfinite(SPM.lss_ind(1,:))) = Vbeta; % ...and insert lss_betas
 % now prune this to only those betas for which we get an lss_beta
 SPM.Vbeta_lss = SPM.Vbeta_lss(1:nLss);
 
