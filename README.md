@@ -1,103 +1,83 @@
-SPM based preprocessing and analyses for data in BIDS format  
-Includes a function to download the data from the DICOM data base to the project directory
+SPM based data import, preprocessing and analyses for data in BIDS format  
+Includes a function to download the data from the ISN DICOM data base to the project directory  
 
 The data are organized like this:  
 
 # Organisation  
 c:\peep - the top data directory  
-inside you need \derivatives and \rawdata (in the latter nothing happens)
-here you also clone this repository and should create a /scripts directory where your *.m functions go
-**Do not edit the spm_bids_pipeline**
+inside you will get a directory \derivatives  
+The data import routine (import_data_ses.m) will put all images in /derivatives/spm_preprocessing but will also make a  
+gzipped copy in the main study directory  
+  
+You can clone this repository to any directory, but should keep it as is  
+
+**Do not edit files inside spm_bids_pipeline**  
+  
+It is advisable to have a "scripts" directory somewhere where your wrapper functions are located  
+In this wrapper function make sure to have an   
+**addpath('path_2_som_bids_pipeline')**
 
 inside derivatives you have spm_preprocessing where all the data goes using \sub-01 etc  
-inside sub-01 you have \anat and \func  
+inside sub-01 you have \anat and \func   
 
-Before you start you need to create a **get_study_specs.m** in your /scripts folder. Here is an example to help you   
+Before you start you need to create a **get_study_specs.m** in your "scripts" folder. There is an example inside the repository "get_study_specs.txt"  
+Copy it to "scripts" edit it and rename it to "get_study_specs.m"  
 
-
-**The first section deals with data import from the DICOM data base**  
-
-import.prisma        = {{22147, 22165},{22197, 22214}}; % translates to PRISMA_nnn What is in curly brackets belongs to 1 volunteer (ie 2 sessions) 
-import.prisma_no     = [2             ,3             ]; % assign BIDS subject numbers
-                                    
-import.user          = 'buechel';
-import.server        = 'aither.nin.uke.uni-hamburg.de';
-
-import.data(1).dir        = 'func'; %needs to be BIDS conform
-import.data(1).type       = 'epi';
-import.data(1).seq        = 'ninEPI_bold_v12B, 1.5mm3, mb3 '; %protocol name (trailing space makes it unique) 
-import.data(1).cond       = 'n > 600'; % heuristic to get only valid runs (e.g. more than 1000 volumes)
-
-import.data(2).dir        = 'anat'; % valid BIDS dir name
-import.data(2).type       = 'T1w'; % valid BIDS file name
-import.data(2).seq        = 'mprage, HR64 ';
-import.data(2).cond       = 'n == 240'; % heuristic to get only valid runs (e.g. exactly 240 slices)
- 
-% import.data(3).dir        = 'fmap';
-% import.data(3).type       = 'phasediff';
-% import.data(3).seq        = 'gre_field_map, 2mm ';
-% import.data(3).cond       = 'n == 40';
-% 
-% import.data(4).dir        = 'fmap';
-% import.data(4).type       = 'magnitude';
-% import.data(4).seq        = 'gre_field_map, 2mm ';
-% import.data(4).cond       = 'n == 80';
-
-import.dummies            = 3; % how many dummies will be deleted in the 4D epi file
-
-
-**The first are the path definitions and need to be adapted**  
-%% path definitions  
-path.baseDir     = 'd:\peep\';  
-path.templateDir = 'd:\peep\spm_bids_pipeline\templates\'; % the templates come with the git repository, so should be here  
   
-path.rawDir          = fullfile(path.baseDir, 'rawdata'); % that should be the folder with the not-to-touch data sets  
-path.derivDir        = fullfile(path.baseDir, 'derivatives');  
-path.preprocDir      = fullfile(path.baseDir, 'derivatives', 'spm_preprocessing');  
-path.firstlevelDir   = fullfile(path.baseDir, 'derivatives', 'spm_firstlevel');  
-path.secondlevelDir  = fullfile(path.baseDir, 'derivatives', 'spm_secondlevel');  
-  
-**Don't touch the following unless you know what you are doing**  
-%% various predefined names (do not change)  
-vars.skullStripID    = 'skull-strip-T1.nii';  
-vars.T1maskID        = 'brain_mask.nii';  
-vars.templateID      = 'cb_Template_%d_Dartel.nii';  
-vars.templateT1ID    = 'cb_Template_T1.nii';  
-%vars.groupMaskID     = 'brainmask.nii';  
-vars.groupMaskID     = 'neuromorphometrics.nii';  
-
-**the next section needs to be edited to match your data**  
-vars.max_procs   = 12 %How many physical cores of your CPU you can use  
-vars.task        = 'peep'; %Name of your task in all the filenames  
-vars.nRuns       = 4; %Number of Runs  
-vars.nSess       = 2; %Number of Sessions  
-% get info for slice timing correction  
-vars.sliceTiming.so    = [1722,1662,1602,1543,1485,1425,1365,1305,1248,1188,1127,1067,1010,950,890,832,772,712,653,595,535,475,415,358,298,237,177,120,60,0,...  
-    1722,1662,1602,1543,1485,1425,1365,1305,1248,1188,1127,1067,1010,950,890,832,772,712,653,595,535,475,415,358,298,237,177,120,60,0]; %vector of acquistion times in ms  
-vars.sliceTiming.tr       = 1.8;  %TR in s  
-vars.sliceTiming.nslices  = 60; %Number of slices, should be size(vars.sliceTiming.so,2)  
-vars.sliceTiming.refslice = 900; %Reference slice for slice timing  
-  
-  
+Then you should create a wrapper file such as "do_em_all.m" that will sequentially call the subfunctions in the repository  
+There atre some examples in the repo (all with ext .txt)
 # Examples  
 ## do_em_all_basic   
   
 The workflow of a basic brain EPI+T1 preprocessing  
-   
-Final EPI images for analysis: __rasub*__  
+
+## do_em_all_realign_two_step  (RECOMMENDED)  
+realignment of the brain is done in two steps:  
+Initailly a simple run is performed to create a mean image  
+After all the masks have been created the realignment (2-pass) is done again, but with a brainmask eg. to discard eye movements  
+
+% perform slice timing correction  
+slice_timing(all_sub_ids);  
   
-## do_em_all_realign_two_step  (RECOMMENDED)
-as above, but realignment of the brain is done in two steps:   
-Initailly a single run is performed to create a mean  
-After all the masks have been created the realignment (2-pass) is done with a brainmask eg. to discard eye movements  
-Final EPI images for analysis: __rasub*__  
+% perform initial realignment (one pass, write mean only)  
+realign_1_2(all_sub_ids);  
+  
+% perform non-linear coregistartion to get from EPI space to T1 space  
+nonlin_coreg(all_sub_ids);  
+  
+% perform skull stripping  
+skullstrip(all_sub_ids);  
+  
+% perform spatial normalization of T1 to Template space using DARTEL  
+create_dartel(all_sub_ids);  
+  
+% create various warp fields to map from EPI --> T1 --> Template space  
+create_trans(all_sub_ids);  
+  
+% Create a mnask for the 1st level GLM  
+create_mask(all_sub_ids);   
+  
+% now we repeat the realignemnt but with a brain mask and write out all images  
+realign_2_2(all_sub_ids);  
+  
+% Warp a few images to Template space (skullstrip and mean EPI)  
+warp_images(all_sub_ids);  
+  
+% Create a mean skullstrip and a mean of mean EPIs for all_sub_ids  
+create_means(all_sub_ids);  
+  
+Final EPI images for brain analysis: __rasub*__  
+  
+  
   
 ## do_em_all_bs  
-realignment is done specificlly for the brainstem  
-Final EPI images for analysis: __brasub*__  
+additional realignment is done specificlly for the brainstem  
+do this AFTER you have done the above ie preprocessing for the brain  
+  
+% create subject specific brainstem masks  
+create_bs_mask(all_sub_ids);  
+% does realignment with a weight of 1 over the braistem and zeros elsewhere  
+realign_bs(all_sub_ids);  
+  
+Final EPI images for brainstem analysis: __brasub*__  
 
-## do_em_all_bs_physio  (EXPERIMENTAL)
-realignment is done specificlly for the brainstem but before motion is estimated physio and CSF regressors are removed from the data  
-Final EPI images for analysis: __pbrasub*__  
-  
-  

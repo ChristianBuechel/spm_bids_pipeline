@@ -14,6 +14,7 @@ for sub = 1:n_subs
     
     
     struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
+    struc_file = struc_file(1); % if there are more than 1
     anat_dir   = spm_file(struc_file,'path');
 
     epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');

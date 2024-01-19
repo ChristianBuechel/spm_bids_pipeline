@@ -18,6 +18,7 @@ for sub = 1:n_subs
     func_dir   = spm_file(epi,'path');
     
     struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
+    struc_file = struc_file(1); % if there are more than 1
     anat_dir   = spm_file(struc_file,'path');
     c3_file    = spm_file(struc_file,'prefix','c3');
     u_rc1_file = spm_file(struc_file,'prefix','u_rc1');

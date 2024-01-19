@@ -1,5 +1,5 @@
 function analyses(all_sub_ids)
-% example for a 1st level and second level analysis function
+% example for a 1st löevel and secopnd löevel anaylsis function
 
 % resolve paths
 [path,vars,analysis]  = get_study_specs;
@@ -135,6 +135,7 @@ for sub = 1:n_subs
     % get relevant dirs
     
     struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
+    struc_file = struc_file(1); % if there are more than 1
     u_rc1_file = spm_file(struc_file,'prefix','u_rc1');
     
     func_dir = spm_file(path.epifiles{run},'path');
@@ -191,7 +192,7 @@ for sub = 1:n_subs
     
     
     a_dir    = fullfile(path.firstlevelDir,sprintf('sub-%02d',sub_id),anadirname);
-    lss_ind = [];
+    
     for run = 1:n_run
         % first get the nuisance vectors (movement, wm, csf etc)
         if bs == 1
@@ -277,8 +278,8 @@ for sub = 1:n_subs
             if ~isempty(t_ind)
                 cond_use{run} = [cond_use{run} ii];
                 RES(cnt).name      = items{ii};
-                RES(cnt).onset     = (x.onset(t_ind)')./TR + shift;
-                RES(cnt).duration  = (x.duration(t_ind)')./TR;
+                RES(cnt).onset     = x.onset(t_ind)' + shift;
+                RES(cnt).duration  = x.duration(t_ind)';
                 if ana == 1 % FIR always has duration of 0
                     RES(cnt).duration  = zeros(size(x.duration(t_ind)'));
                 end
@@ -309,23 +310,15 @@ for sub = 1:n_subs
             template.spm.stats.fmri_spec.sess(run).cond = RES_LSA;
             cond_use{run}  = [1:size(all,1)]; % recalc cond_use
             if run>1
-                cond_use{run} = cond_use{run} + max(cond_use{run-1});
+                cond_use{run} = cond_use{run} + max(cond_use{run-1})
             end
         end
         
         for nuis = 1:n_nuis
             template.spm.stats.fmri_spec.sess(run).regress(nuis) = struct('name', cellstr(num2str(nuis)), 'val', all_nuis{run}(:,nuis));
         end
-            if run>1
-        lss_ind = [lss_ind [max(lss_ind)+1:max(lss_ind)+numel(template.spm.stats.fmri_spec.sess(run).cond) ones(1,numel(z{run})).*NaN;...
-            cat(1,template.spm.stats.fmri_spec.sess(run).cond.duration)' ones(1,numel(z{run})).*NaN]]; %increase numbers   
-            else
-        lss_ind = [lss_ind [1:numel(template.spm.stats.fmri_spec.sess(run).cond) ones(1,numel(z{run})).*NaN;...
-            cat(1,template.spm.stats.fmri_spec.sess(run).cond.duration)' ones(1,numel(z{run})).*NaN]];    
-            end
     end
-    lss_ind = [lss_ind ones(2,n_run).*NaN];  % add constants  
-
+    
     template_wls.spm.tools.rwls.fmri_rwls_spec.sess = template.spm.stats.fmri_spec.sess;
     
     if concatenate
@@ -365,10 +358,7 @@ for sub = 1:n_subs
                 end
             end
         end
-        lss_ind  = [1:numel(new_t.spm.stats.fmri_spec.sess(1).cond) ones(1,n_run + numel(z{1})).*NaN;...
-                    cat(1,new_t.spm.stats.fmri_spec.sess(run).cond.duration)' ones(1,n_run + numel(z{1})).*NaN];
-        %%% NEVER tested
-        
+        lss_ind  = [1:numel(new_t.spm.stats.fmri_spec.sess(1).cond) ones(1,n_run + numel(z{1})).*NaN];
         %cond_use =
         %[1:n_base*numel(new_t.spm.stats.fmri_spec.sess(1).cond)]; --> not needed anymore
         n_run    = 1; % set # of runs to 1
