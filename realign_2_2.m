@@ -12,12 +12,14 @@ run_parallel = 1;
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
+    epi        =  epi(1); % if there are brain and spinal, just take brain
     func_dir   = spm_file(epi,'path');
 
     cnt        = 1;
     for ses = 1:vars.nSess
         for run = 1:vars.nRuns
             epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+            epi                =  epi(1); % if there are brain and spinal, just take brain
             run_niftis         =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^a'),Inf);
             all_niftis{cnt,1}  =  cellstr(run_niftis);
             cnt                =  cnt + 1;

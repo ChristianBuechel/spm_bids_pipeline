@@ -18,6 +18,8 @@ for sub = 1:n_subs
     anat_dir   = spm_file(struc_file,'path');
     
     epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
+    epi        = epi(1); % if there are brain and spinal, just take brain
+
     func_dir   = spm_file(epi,'path');
     
     c_files{1}  = spm_file(struc_file,'prefix','c2');
@@ -35,6 +37,7 @@ for sub = 1:n_subs
         for run = 1:vars.nRuns
             fprintf('ses %d run %d\n',ses,run);
             epi       =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+            epi       =  epi(1); % if there are brain and spinal, just take brain
             epi_files =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^ra'),Inf);
             %extract_segment(epi_files,cm_file,epi_2_T1,c_files,[],thresh,ex_var);
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.evaluated = epi_files;

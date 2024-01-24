@@ -125,9 +125,11 @@ for sub = 1:n_subs
     end
     cnt        = 1;
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            path.epifiles{cnt} =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            cnt                =  cnt + 1;
+        for run = 1:vars.nRuns           
+            epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+            epi = epi(1); % if there are brain and spinal, just take brain
+            path.epifiles{cnt} = epi;
+            cnt                = cnt + 1;
         end
     end
     n_run      = vars.nRuns*vars.nSess;

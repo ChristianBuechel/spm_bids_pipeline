@@ -19,7 +19,7 @@ for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     
     epi        =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    
+    epi        =  epi(1); % if there are brain and spinal, just take brain
     cnt        = 1;
     for ses = 1:vars.nSess
         for run = 1:vars.nRuns
@@ -60,7 +60,8 @@ for sub = 1:n_subs
     for ses = 1:vars.nSess
         for run = 1:vars.nRuns
             epi =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            
+            epi =  epi(1); % if there are brain and spinal, just take brain
+
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(epi,'prefix','rp_a','ext','.txt'); %rename rp*txt files to brp*txt
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.pattern = 'rp_asub';

@@ -17,6 +17,7 @@ for sub = 1:n_subs
     for ses = 1:vars.nSess
         for run = 1:vars.nRuns
             epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+            epi                =  epi(1); % if there are brain and spinal, just take brain
             run_niftis         =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^ra'),1);
             runa_niftis        =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^a'),Inf);
             all_niftis{cnt,1}  =  run_niftis;
@@ -29,6 +30,10 @@ for sub = 1:n_subs
 
     plot_realign(alla_niftis);
     spm_jobman('run',matlabbatch);
+    spm_orthviews('Reposition',[0 0 0]);
+    spm_orthviews('zoom',Inf);
+    spm_orthviews('redraw');
+
     fprintf('Checking Subject %d \nPress enter in command window to continue\n',sub_id);
     input('');
 end

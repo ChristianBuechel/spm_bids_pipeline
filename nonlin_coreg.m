@@ -35,6 +35,7 @@ for sub = 1:n_subs
     sc6_file    = spm_file(struc_file, 'prefix','sc6');
     
     epi         = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
+    epi         = epi(1); % if there are brain and spinal, just take brain
     mean_file   = spm_file(epi,'prefix','meana');
 
     
@@ -109,7 +110,8 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.eoptions.reg = reg*[0 1e-05 0.005 0.0005 0.002];%if reg is bigger nonlinear will be less aggressive
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.eoptions.fwhm = 3;
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.eoptions.samp = 3;
-    matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.bb = [NaN NaN NaN; NaN NaN NaN];
+    %matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.bb = [NaN NaN NaN; NaN NaN NaN];
+    matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.bb = [-100 -150 -100;100 150 100]; % bigger for larger diffs between T1 and EPI
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.vox = [1.5 1.5 1.5];
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.interp = 4;
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.prefix = 'c';

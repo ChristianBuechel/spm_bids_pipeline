@@ -24,6 +24,7 @@ for sub = 1:n_subs
     anat_dir   = spm_file(struc_file,'path');
 
     epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
+    epi        =  epi(1); % if there are brain and spinal, just take brain
     func_dir   = spm_file(epi,'path');
   
     c1_file     = spm_file(struc_file,'prefix','c1');    
@@ -44,8 +45,7 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fnames = fullfile(anat_dir, mask_name);
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.weight = {''};
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.savedir.saveusr = func_dir;
-    %matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [NaN NaN NaN;NaN NaN NaN];
-    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [-90 -124 -100;90 130 110]; %make it large as we do not know where people moved to
+    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [-100 -150 -100;100 150 100]; % same as nlin_coreg
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.vox = [NaN NaN NaN];
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.preserve = 2; %option for labels, does a perfect job for binary image
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fwhm = [0 0 0];
@@ -56,8 +56,7 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fnames = fullfile(anat_dir, vars.skullStripID); %also create a skullstrip in EPI space
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.weight = {''};
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.savedir.saveusr = anat_dir;
-    %matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [NaN NaN NaN;NaN NaN NaN];
-    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [-90 -124 -100;90 130 110]; %make it large as we do not know where people moved to
+    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [-100 -150 -100;100 150 100]; % same as nlin coreg
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.vox = [NaN NaN NaN];
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.preserve = 0; % simple
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fwhm = [0 0 0];

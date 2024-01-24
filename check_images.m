@@ -18,6 +18,7 @@ for sub = 1:n_subs
     anat_dir   = spm_file(struc_file,'path');
 
     epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
+    epi        = epi(1); % if there are brain and spinal, just take brain
     func_dir   = spm_file(epi,'path');
     
     skull_file      = fullfile(anat_dir, vars.skullStripID);
@@ -32,6 +33,10 @@ for sub = 1:n_subs
     % Images in the same row are in the same space !
     
     spm_jobman('run',matlabbatch);
+    spm_orthviews('Reposition',[0 0 0]);
+    spm_orthviews('zoom',Inf);
+    spm_orthviews('redraw');
+
     fprintf('Checking Subject %d \nPress enter in command window to continue\n',sub_id);
     input('');
 end
