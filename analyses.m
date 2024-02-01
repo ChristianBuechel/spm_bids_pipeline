@@ -133,7 +133,7 @@ for sub = 1:n_subs
     struc_file = struc_file(1); % if there are more than 1
     u_rc1_file = spm_file(struc_file,'prefix','u_rc1');
     
-    func_dir = spm_file(epifiles{1},'path');
+    mean_dir = spm_file(epifiles{1},'path');
     
     template = []; template_wls = []; % everything will first go into a template struc and added to matlabbatch as needed
     
@@ -165,10 +165,10 @@ for sub = 1:n_subs
     template_wls.spm.tools.rwls.fmri_rwls_spec.cvi = 'wls'; % here we differ
     
     if bs == 1
-        template.spm.stats.fmri_spec.mask           = cellstr(fullfile(func_dir,'bins3cbrainstem_mask.nii')); % specify which voxels to analyse
+        template.spm.stats.fmri_spec.mask           = cellstr(fullfile(mean_dir,'bins3cbrainstem_mask.nii')); % specify which voxels to analyse
         template_wls.spm.tools.rwls.fmri_rwls_spec.mask = template.spm.stats.fmri_spec.mask;
     else
-        template.spm.stats.fmri_spec.mask           = cellstr(fullfile(func_dir,'s3rbrain_mask.nii'));
+        template.spm.stats.fmri_spec.mask           = cellstr(fullfile(mean_dir,'s3rbrain_mask.nii'));
         template_wls.spm.tools.rwls.fmri_rwls_spec.mask = template.spm.stats.fmri_spec.mask;
     end
     
@@ -370,11 +370,12 @@ for sub = 1:n_subs
 
                     new_t.spm.stats.fmri_spec.sess(1).cond(c).duration  = [new_t.spm.stats.fmri_spec.sess(1).cond(c).duration template.spm.stats.fmri_spec.sess(run).cond(c).duration];
                     new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).duration  = [new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).duration template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).cond(c).duration];
-
-                    for pm = 1:numel(new_t.spm.stats.fmri_spec.sess(1).cond(c).pmod)
-                        new_t.spm.stats.fmri_spec.sess(1).cond(c).pmod(pm).param  = [new_t.spm.stats.fmri_spec.sess(1).cond(c).pmod(pm).param; template.spm.stats.fmri_spec.sess(run).cond(c).pmod(pm).param];
-                        new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).pmod(pm).param  = [new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).pmod(pm).param; template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).cond(c).pmod(pm).param];
-                 end
+                    if isfield(new_t.spm.stats.fmri_spec.sess(1).cond(c),'pmod')
+                        for pm = 1:numel(new_t.spm.stats.fmri_spec.sess(1).cond(c).pmod)
+                            new_t.spm.stats.fmri_spec.sess(1).cond(c).pmod(pm).param  = [new_t.spm.stats.fmri_spec.sess(1).cond(c).pmod(pm).param; template.spm.stats.fmri_spec.sess(run).cond(c).pmod(pm).param];
+                            new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).pmod(pm).param  = [new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).pmod(pm).param; template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).cond(c).pmod(pm).param];
+                        end
+                    end
                 end
             end
         end
@@ -567,7 +568,7 @@ for sub = 1:n_subs
     if do_warp
         %using nlin coreg + DARTEL
         mbi = mbi + 1;
-        matlabbatch{mbi,sub}.spm.util.defs.comp{1}.def = fullfile(func_dir,'y_epi_2_template.nii');
+        matlabbatch{mbi,sub}.spm.util.defs.comp{1}.def = fullfile(mean_dir,'y_epi_2_template.nii');
         if analysis.use_vasa == 1
             matlabbatch{mbi,sub}.spm.util.defs.out{1}.pull.fnames = cellstr(spm_file(warp_files, 'prefix','v'));
         else
