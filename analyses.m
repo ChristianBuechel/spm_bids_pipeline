@@ -133,7 +133,7 @@ for sub = 1:n_subs
     struc_file = struc_file(1); % if there are more than 1
     u_rc1_file = spm_file(struc_file,'prefix','u_rc1');
     
-    func_dir = spm_file(epifiles{run},'path');
+    func_dir = spm_file(epifiles{1},'path');
     
     template = []; template_wls = []; % everything will first go into a template struc and added to matlabbatch as needed
     
@@ -187,6 +187,7 @@ for sub = 1:n_subs
     lss_ind = [];
     
     for run = 1:n_run
+        func_dir = spm_file(epifiles{run},'path');
         % first get the nuisance vectors (movement, wm, csf etc)
         if bs == 1
             fm        = spm_file(epifiles{run},'prefix','rp_ba','ext','.txt');
