@@ -108,7 +108,7 @@ end
 %% Main analyis loop
 matlabbatch = [];
 for sub = 1:n_subs
-    mbi        = 0;
+    mbi        = 1;
     sub_id     = all_sub_ids(sub);
     if vars.nSess > 1
         warning('This routine will collapse all sessions into a single one !')
@@ -367,7 +367,7 @@ for sub = 1:n_subs
                 else
                     new_t.spm.stats.fmri_spec.sess(1).cond(c).onset     = [new_t.spm.stats.fmri_spec.sess(1).cond(c).onset template.spm.stats.fmri_spec.sess(run).cond(c).onset + c_scan_vec(run-1)];
                     new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).onset     = [new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).onset template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).cond(c).onset + c_scan_vec(run-1)];
-
+                    
                     new_t.spm.stats.fmri_spec.sess(1).cond(c).duration  = [new_t.spm.stats.fmri_spec.sess(1).cond(c).duration template.spm.stats.fmri_spec.sess(run).cond(c).duration];
                     new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).duration  = [new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).duration template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).cond(c).duration];
                     if isfield(new_t.spm.stats.fmri_spec.sess(1).cond(c),'pmod')
@@ -390,16 +390,9 @@ for sub = 1:n_subs
     end
     
     if do_model
-        
-        mbi = mbi + 1;
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = sprintf('--------------\ndoing Subject %d\n--------------\n',sub_id);
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'fprintf';
-        mbi = mbi + 1;
-        
         mkdir(a_dir);
         copyfile(which(mfilename),a_dir); % copy this file into analysis directory
-        copyfile(which('get_study_specs'),a_dir);% and copy this file as it contains everything necessary to repeat the analysis        
+        copyfile(which('get_study_specs'),a_dir);% and copy this file as it contains everything necessary to repeat the analysis
         template.spm.stats.fmri_spec.dir = {[a_dir]};
         template_wls.spm.tools.rwls.fmri_rwls_spec.dir = template.spm.stats.fmri_spec.dir;
         
@@ -408,18 +401,18 @@ for sub = 1:n_subs
         else
             matlabbatch{mbi,sub} = template;
         end
+        mbi = mbi + 1;
         
         if concatenate
-            mbi = mbi + 1;
             matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
             matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = scan_vec;
             matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
             matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'spm_fmri_concatenate';
+            mbi = mbi + 1;
         end
     end
     
     if do_est
-        mbi = mbi + 1;
         if wls
             matlabbatch{mbi,sub}.spm.tools.rwls.fmri_rwls_est.spmmat = {fullfile(a_dir,'SPM.mat')};
             matlabbatch{mbi,sub}.spm.tools.rwls.fmri_rwls_est.method.Classical = 1;
@@ -427,21 +420,22 @@ for sub = 1:n_subs
             matlabbatch{mbi,sub}.spm.stats.fmri_est.spmmat           = {fullfile(a_dir,'SPM.mat')};
             matlabbatch{mbi,sub}.spm.stats.fmri_est.method.Classical = 1;
         end
+        mbi = mbi + 1;
     end
     
     if do_lss
-        mbi = mbi + 1;
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = lss_ind;
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'spm_spm_lss';
+        mbi = mbi + 1;
     end
     
     if do_vasa
-        mbi = mbi + 1;
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'cb_vasa';
+        mbi = mbi + 1;
     end
     
     
@@ -464,16 +458,16 @@ for sub = 1:n_subs
     end
     
     if ana == 3 % f-con for LSA needs adjustment
-       max_cond = 0;
-       for run = 1:n_run
-           max_cond = max(max_cond, max(cond_use{run}));
-       end    
-       i_reg = 1:max_cond;
-       n_reg = ones(size(i_reg));
+        max_cond = 0;
+        for run = 1:n_run
+            max_cond = max(max_cond, max(cond_use{run}));
+        end
+        i_reg = 1:max_cond;
+        n_reg = ones(size(i_reg));
     end
     
     
-    f_vec = []; 
+    f_vec = [];
     for run = 1:n_run
         cvec{run} = zeros(sum(n_reg));
         for co = 1:numel(cond_use{run})
@@ -527,8 +521,8 @@ for sub = 1:n_subs
     end
     
     if do_cons
-        mbi = mbi + 1;
         matlabbatch{mbi,sub} = template; % now add constrasts to batch
+        mbi = mbi + 1;
     end
     
     % prepare_warp
@@ -551,7 +545,6 @@ for sub = 1:n_subs
     if do_correct_vasa
         vasa_file = fullfile(a_dir,'vasa_res.nii');
         for co = 1:size(warp_files,1)
-            mbi = mbi + 1;
             c_f = strtrim(warp_files(co,:));
             matlabbatch{mbi,sub}.spm.util.imcalc.input  = {c_f,vasa_file}';
             matlabbatch{mbi,sub}.spm.util.imcalc.output = spm_file(c_f,'prefix','v');
@@ -562,12 +555,12 @@ for sub = 1:n_subs
             matlabbatch{mbi,sub}.spm.util.imcalc.options.mask = 0;
             matlabbatch{mbi,sub}.spm.util.imcalc.options.interp = 1;
             matlabbatch{mbi,sub}.spm.util.imcalc.options.dtype = 16;
+            mbi = mbi + 1;
         end
     end
     
     if do_warp
         %using nlin coreg + DARTEL
-        mbi = mbi + 1;
         matlabbatch{mbi,sub}.spm.util.defs.comp{1}.def = fullfile(mean_dir,'y_epi_2_template.nii');
         if analysis.use_vasa == 1
             matlabbatch{mbi,sub}.spm.util.defs.out{1}.pull.fnames = cellstr(spm_file(warp_files, 'prefix','v'));
@@ -579,10 +572,10 @@ for sub = 1:n_subs
         matlabbatch{mbi,sub}.spm.util.defs.out{1}.pull.mask = 1;
         matlabbatch{mbi,sub}.spm.util.defs.out{1}.pull.fwhm = [0 0 0];
         matlabbatch{mbi,sub}.spm.util.defs.out{1}.pull.prefix = 'w';
+        mbi = mbi + 1;
     end
     
     if do_smooth
-        mbi = mbi + 1;
         if analysis.use_vasa == 1
             matlabbatch{mbi,sub}.spm.spatial.smooth.data   = cellstr(spm_file(warp_files, 'prefix','wv'));
         else
@@ -590,6 +583,7 @@ for sub = 1:n_subs
         end
         matlabbatch{mbi,sub}.spm.spatial.smooth.fwhm   = skernel;
         matlabbatch{mbi,sub}.spm.spatial.smooth.prefix = ['s' sm_str];
+        mbi = mbi + 1;
     end
     
 end
@@ -637,7 +631,7 @@ if do_one_t
         matlabbatch = [];
         allfiles    = [];
         
-       for su = 1:numel(groups{1})
+        for su = 1:numel(groups{1})
             name        = sprintf('sub-%02d',groups{1}(su));
             a_dir       = fullfile(path.firstlevelDir, name, anadirname);
             s_string    = sprintf('s%s',sm_str);
@@ -678,7 +672,7 @@ if do_one_t
         matlabbatch{mbi}.spm.stats.fmri_est.spmmat = {fullfile(out_dir,'SPM.mat')};
         matlabbatch{mbi}.spm.stats.fmri_est.method.Classical = 1;
         mbi = mbi + 1;
-
+        
         matlabbatch{mbi}.spm.stats.con.spmmat = {fullfile(out_dir,'SPM.mat')};
         matlabbatch{mbi}.spm.stats.con.delete = 1;
         
@@ -703,7 +697,7 @@ end
 
 if do_fact || do_fact_con
     addon   = [addon 'FACT'];
-
+    
     out_dir = fullfile(path.secondlevelDir,[addon '_' anadirname '_' sm_str]);
     
     matlabbatch = [];
