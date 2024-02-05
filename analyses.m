@@ -675,11 +675,11 @@ if do_one_t
         matlabbatch{mbi}.spm.stats.factorial_design.globalm.glonorm = 1;
         mbi = mbi + 1;
         
-        matlabbatch{mbi}.spm.stats.fmri_est.spmmat = {[out_dir '\SPM.mat']};
+        matlabbatch{mbi}.spm.stats.fmri_est.spmmat = {fullfile(out_dir,'SPM.mat')};
         matlabbatch{mbi}.spm.stats.fmri_est.method.Classical = 1;
         mbi = mbi + 1;
 
-        matlabbatch{mbi}.spm.stats.con.spmmat = {[out_dir '\SPM.mat']};
+        matlabbatch{mbi}.spm.stats.con.spmmat = {fullfile(out_dir,'SPM.mat')};
         matlabbatch{mbi}.spm.stats.con.delete = 1;
         
         co = 1;
@@ -780,7 +780,7 @@ if do_fact || do_fact_con
         matlabbatch{1}.spm.stats.factorial_design.masking.em = {fullfile(path.templateDir, vars.groupMaskID)};
     end
     
-    matlabbatch{2}.spm.stats.fmri_est.spmmat = {[out_dir '\SPM.mat']};
+    matlabbatch{2}.spm.stats.fmri_est.spmmat = {fullfile(out_dir,'SPM.mat')};
     matlabbatch{2}.spm.stats.fmri_est.method.Classical = 1;
 end
 
@@ -793,8 +793,8 @@ end
 
 if do_fact_con
     matlabbatch = [];
-    clear SPM; load([out_dir '\SPM.mat']); %should exist by now
-    matlabbatch{1}.spm.stats.con.spmmat = {[out_dir '\SPM.mat']};
+    clear SPM; load(fullfile(out_dir,'SPM.mat')); %should exist by now
+    matlabbatch{1}.spm.stats.con.spmmat = {fullfile(out_dir,'SPM.mat')};
     matlabbatch{1}.spm.stats.con.delete = 1;
     
     
