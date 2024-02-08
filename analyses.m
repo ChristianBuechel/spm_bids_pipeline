@@ -19,6 +19,7 @@ group_names   = analysis.group_names;
 % house keeping
 con_temp          = 'con_%04.4d.nii';
 beta_temp         = 'beta_%04.4d.nii';
+con_templ         = {'con_[0-9][0-9][0-9][0-9]','spmF_[0-9][0-9][0-9][0-9]','spmT_[0-9][0-9][0-9][0-9]','ess_[0-9][0-9][0-9][0-9]'}; 
 
 TR                = vars.sliceTiming.tr;
 parallel          = analysis.parallel;
@@ -392,7 +393,10 @@ for sub = 1:n_subs
     if do_model
         mkdir(a_dir);
         copyfile(which(mfilename),a_dir); % copy this file into analysis directory
-        copyfile(which('get_study_specs'),a_dir);% and copy this file as it contains everything necessary to repeat the analysis
+        copyfile(which('get_study_specs'),a_dir); % and copy this file as it contains everything necessary to repeat the analysis
+        for ts = 1:numel(tsvfiles)
+            copyfile(char(spm_file(tsvfiles{ts},'suffix', analysis.events)),a_dir); % and copy the respective *.tsv files that were used
+        end
         template.spm.stats.fmri_spec.dir = {[a_dir]};
         template_wls.spm.tools.rwls.fmri_rwls_spec.dir = template.spm.stats.fmri_spec.dir;
         
@@ -521,6 +525,15 @@ for sub = 1:n_subs
     end
     
     if do_cons
+        % get old con files to delete them *con* *spmT* *spmF* *ess* 
+        old_con_files = [];
+        for cc = i:numel(con_templ)
+            old_con_files = strvcat(old_con_files,spm_select('FPList',a_dir,con_templ{cc}));
+        end
+        matlabbatch{mbi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = cellstr(old_con_files);
+        matlabbatch{mbi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.delete = false; % delete all the stuff we do not need anymore
+        mbi = mbi + 1;
+        
         matlabbatch{mbi,sub} = template; % now add constrasts to batch
         mbi = mbi + 1;
     end
