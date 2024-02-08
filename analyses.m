@@ -526,7 +526,7 @@ for sub = 1:n_subs
     
     if do_cons
         % get old con files to delete them *con* *spmT* *spmF* *ess* 
-        old_con_files = [];
+        old_con_files = [''];
         for cc = i:numel(con_templ)
             old_con_files = strvcat(old_con_files,spm_select('FPList',a_dir,con_templ{cc}));
         end
