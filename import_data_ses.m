@@ -4,12 +4,18 @@ function import_data_ses
 % and arrange a la BIDS
 % who an what to import is specified in get_study_specs
 [path,vars,~,import] = get_study_specs;
+if isfield(import,'scanner')
+    scanner = import.scanner; %if this is TRIO we download TRIO images
+else
+    scanner = 'PRISMA';
+end
+
 do_once = 1;
 if ~isunix
     pw = passcode; %assumes that under unix you are already logged on
 end
 mkdir(path.preprocDir); % create coarse directory structure
-spm_save('.bidsignore.','**/PRISMA_*_ftp.txt'); % creates .bidsignore file
+spm_save(fullfile(path.preprocDir,'.bidsignore.'),sprintf('**/%s_*_ftp.txt',scanner)); % creates .bidsignore file
 descr = struct('Name',vars.task,'BIDSVersion','1.0.2');
 spm_jsonwrite(fullfile(path.preprocDir,'dataset_description.json'),descr, struct('indent','  ')); % create description file
 
@@ -18,7 +24,7 @@ for s = 1:numel(import.prisma) % across volunteers
     
     for ses = 1:numel(import.prisma{s})
         fi = 1;ftp_cmd = [];
-        Volunteer(s).sess(ses).ID = sprintf('PRISMA_%d',import.prisma{s}{ses});
+        Volunteer(s).sess(ses).ID = sprintf('%s_%d',scanner,import.prisma{s}{ses});
         ftp_file = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('%s_ftp.txt',Volunteer(s).sess(ses).ID)); %create SFTP batch file
         fprintf('Doing #%d session %d (%s) \n',import.prisma_no(s),ses,Volunteer(s).sess(ses).ID);
         if isunix
@@ -135,7 +141,7 @@ for s = 1:numel(import.prisma) % across volunteers
                         
                     end
                 elseif (strcmp(Volunteer(s).sess(ses).data{tt}(run).mod,'anat') || strcmp(Volunteer(s).sess(ses).data{tt}(run).mod,'blip') || strcmp(Volunteer(s).sess(ses).data{tt}(run).mod,'fmap'))
-                    source = spm_select('FPlist',fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)),'^sPRISMA.*\.nii$');
+                    source = spm_select('FPlist',fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)),sprintf('^s%s.*\\.nii$',scanner));
                     if size(source,1) > 1 % e.g. 2 magnitude images for fieldmap
                         for si=1:size(source,1)
                             target = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_%s%d.nii',import.prisma_no(s),ses,import.data(tt).type,si));
