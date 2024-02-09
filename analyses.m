@@ -628,16 +628,17 @@ if do_one_t
         warning('One sample t-test only works for a single group, will only analyse group 1');
     end
     addon   = [addon 'ONE_T'];
-    % first let's get rid of negative contrasts
+    % first let's get rid of negative contrasts --> commented (see below) as it removes
+    % too many cons (e.g. [1 0] and [1 -1] are correlated with -1 ...) 
     cc    = corrcoef(t_con');
     [~,c] = find(triu(cc)<-.9999999999); % all in c are redundant
     pruned_t_con_names = t_con_names;
-    pruned_t_con_names(c) = [];
+    %pruned_t_con_names(c) = [];
     pruned_add_con_ind = add_con_ind;
-    pruned_add_con_ind(c) = [];
+    %pruned_add_con_ind(c) = [];
     for co = 1:size(pruned_t_con_names,2)
         out_dir = fullfile(path.secondlevelDir,[addon '_' anadirname '_' sm_str '_' pruned_t_con_names{co}]);
-        out_dir = strrep(out_dir,'>','_bt_'); %these chars are not allowed in directory names ...
+        out_dir = strrep(out_dir,'>','_bt_'); % these chars are not allowed in directory names ...
         out_dir = strrep(out_dir,'<','_st_');
         mkdir(out_dir);
         
@@ -722,7 +723,7 @@ if do_fact || do_fact_con
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(1).ancova = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).name = 'SUBJECT';
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).dept = 0;
-    matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).variance = 1;
+    matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).variance = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).gmsca = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).ancova = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).name = 'CONDITION';
@@ -731,7 +732,7 @@ if do_fact || do_fact_con
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).gmsca = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).ancova = 0;
     if ana == 1  % FIR
-        matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(1).variance = 0;
+        matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).variance = 0;
         matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).dept = 0; %too many ...
         matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).variance = 1;
     end
