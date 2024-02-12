@@ -189,6 +189,22 @@ for sub = 1:n_subs
     
     for run = 1:n_run
         func_dir = spm_file(epifiles{run},'path');
+        % first get min and max onset to trim scans
+        min_onset = Inf;
+        max_onset = -Inf;
+        x = spm_load(char(spm_file(tsvfiles{run},'suffix', analysis.events))); % load onset *.tsv file; analysis.events allows different tsv files
+        if isnumeric(x.trial_type) % the rare case that all conditions are numbers...
+            x.trial_type = strtrim(cellstr(num2str(x.trial_type)));
+        end
+        for ii=1:numel(cond_names)
+            t_ind = find(strcmp(x.trial_type,cond_names(ii)));
+            if ~isempty(t_ind) || (concatenate == 1) % allow empty in some runs when concatenate, bc other runs have the condition (maybe check in the end whether any run has it)
+                c_onset     = (x.onset(t_ind)')./TR + shift; % times in tsv files are in seconds according to BIDS
+                min_onset   = min([min_onset c_onset]);
+                max_onset   = max([max_onset c_onset]);
+            end
+        end
+             
         % first get the nuisance vectors (movement, wm, csf etc)
         if bs == 1
             fm        = spm_file(epifiles{run},'prefix','rp_ba','ext','.txt');
@@ -261,7 +277,9 @@ for sub = 1:n_subs
         template.spm.stats.fmri_spec.sess(run).hpf       = analysis.hpf;
         
         x = spm_load(char(spm_file(tsvfiles{run},'suffix', analysis.events))); % load onset *.tsv file; analysis.events allows different tsv files
-        
+        if isnumeric(x.trial_type) % the rare case that all conditions are numbers...
+            x.trial_type = strtrim(cellstr(num2str(x.trial_type)));
+        end
         RES   = [];cnt = 1;cond_use{run} = []; %initialize some variables
         for ii=1:numel(cond_names)
             t_ind = find(strcmp(x.trial_type,cond_names(ii)));
