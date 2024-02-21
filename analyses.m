@@ -189,7 +189,8 @@ for sub = 1:n_subs
     
     for run = 1:n_run
         func_dir = spm_file(epifiles{run},'path');
-        % first get min and max onset to trim scans
+        
+        % first get min and max onset to trim scans not yet implemented
         min_onset = Inf;
         max_onset = -Inf;
         x = spm_load(char(spm_file(tsvfiles{run},'suffix', analysis.events))); % load onset *.tsv file; analysis.events allows different tsv files
@@ -200,12 +201,12 @@ for sub = 1:n_subs
             t_ind = find(strcmp(x.trial_type,cond_names(ii)));
             if ~isempty(t_ind) || (concatenate == 1) % allow empty in some runs when concatenate, bc other runs have the condition (maybe check in the end whether any run has it)
                 c_onset     = (x.onset(t_ind)')./TR + shift; % times in tsv files are in seconds according to BIDS
-                min_onset   = min([min_onset c_onset]);
-                max_onset   = max([max_onset c_onset]);
+                min_onset   = min([min_onset c_onset]); % this can then bee used to trim scans
+                max_onset   = max([max_onset c_onset]); % think about leaving about 8s worth of scans after last event
             end
         end
              
-        % first get the nuisance vectors (movement, wm, csf etc)
+        % then get the nuisance vectors (movement, wm, csf etc)
         if bs == 1
             fm        = spm_file(epifiles{run},'prefix','rp_ba','ext','.txt');
         else
@@ -296,7 +297,9 @@ for sub = 1:n_subs
                 RES(cnt).orth = 0; % no orthogonalization
                 for pm = 1:numel(analysis.p_mod{ii})
                     eval(sprintf('t_pm = x.%s;',char(analysis.p_mod{ii}(pm)))); %load according to analysis.p_mod
-                    t_pm = str2num(strvcat(t_pm)); % convert to numbers
+                    if ~isnumeric(t_pm) % if a column has no NaNs spm_load returns a numeric vector, else strings
+                        t_pm = str2num(strvcat(t_pm)); % convert to numbers
+                    end
                     RES(cnt).pmod(pm).name  = char(analysis.p_mod{ii}(pm));
                     RES(cnt).pmod(pm).param = t_pm(t_ind); % and add
                     RES(cnt).pmod(pm).poly  = 1;
@@ -745,7 +748,7 @@ if do_fact || do_fact_con
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).gmsca = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).ancova = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).name = 'CONDITION';
-    matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).dept = 1;
+    matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).dept = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).variance = 1;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).gmsca = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).ancova = 0;
