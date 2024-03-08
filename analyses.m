@@ -318,6 +318,7 @@ for sub = 1:n_subs
         end
         [~,i] = sort(all(:,1)); % sort all events by scans/time (or comment these 2 lines)
         all   = all(i,:);
+        RES_LSA = [];
         for j=1:size(all,1) % now put in alternative structure
             RES_LSA(j).name       = RES(all(j,2)).name;
             RES_LSA(j).onset      = all(j,1);
@@ -340,7 +341,7 @@ for sub = 1:n_subs
         end
         if ana == 3 % only necessary if we do LS-A
             if run>1
-                lss_ind = [lss_ind [max(lss_ind)+1:max(lss_ind)+numel(template.spm.stats.fmri_spec.sess(run).cond) ones(1,numel(z{run})).*NaN;...
+                lss_ind = [lss_ind [max(lss_ind(1,:))+1:max(lss_ind(1,:))+numel(template.spm.stats.fmri_spec.sess(run).cond) ones(1,numel(z{run})).*NaN;...
                     cat(1,template.spm.stats.fmri_spec.sess(run).cond.duration)' ones(1,numel(z{run})).*NaN]]; %increase numbers
             else
                 lss_ind = [lss_ind [1:numel(template.spm.stats.fmri_spec.sess(run).cond) ones(1,numel(z{run})).*NaN;...
