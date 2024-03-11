@@ -28,9 +28,9 @@ for s = 1:numel(import.prisma) % across volunteers
         ftp_file = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('%s_ftp.txt',Volunteer(s).sess(ses).ID)); %create SFTP batch file
         fprintf('Doing #%d session %d (%s) \n',import.prisma_no(s),ses,Volunteer(s).sess(ses).ID);
         if isunix
-            [status, result] = system(sprintf('ssh %s@%s netapp dicq -lf --series --exam=%s',import.user,import.server,Volunteer(s).sess(ses).ID),'-echo'); % query DICOM database
+            [status, result] = system(sprintf('ssh %s@%s netapp dicq -f --series --exam=%s',import.user,import.server,Volunteer(s).sess(ses).ID),'-echo'); % query DICOM database
         else
-            [status, result] = system(sprintf('plink -ssh %s@%s -pw %s netapp dicq -lf --series --exam=%s',import.user,import.server,pw,Volunteer(s).sess(ses).ID),'-echo');
+            [status, result] = system(sprintf('plink -ssh %s@%s -pw %s netapp dicq -f --series --exam=%s',import.user,import.server,pw,Volunteer(s).sess(ses).ID),'-echo');
         end
         if status ~= 0
             error('cannot retrieve output from dicq');
