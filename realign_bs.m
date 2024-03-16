@@ -20,6 +20,8 @@ for sub = 1:n_subs
     
     epi        =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
     epi        =  epi(1); % if there are brain and spinal, just take brain
+    mean_dir   = spm_file(epi,'path');
+
     cnt        = 1;
     for ses = 1:vars.nSess
         for run = 1:vars.nRuns
@@ -49,7 +51,7 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.eoptions.rtm     = 1;
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.eoptions.interp  = 3;
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.eoptions.wrap    = [0 0 0];
-    matlabbatch{gi,sub}.spm.spatial.realign.estwrite.eoptions.weight  = fullfile(func_dir,'bins3cbrainstem_mask.nii');
+    matlabbatch{gi,sub}.spm.spatial.realign.estwrite.eoptions.weight  = fullfile(mean_dir,'bins3cbrainstem_mask.nii');
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.roptions.which   = [2 1]; %all images, no mean
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.roptions.interp  = 4;
     matlabbatch{gi,sub}.spm.spatial.realign.estwrite.roptions.wrap    = [0 0 0];
@@ -61,7 +63,7 @@ for sub = 1:n_subs
         for run = 1:vars.nRuns
             epi =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
             epi =  epi(1); % if there are brain and spinal, just take brain
-
+            func_dir   = spm_file(epi,'path');
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(epi,'prefix','rp_a','ext','.txt'); %rename rp*txt files to brp*txt
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.pattern = 'rp_asub';
