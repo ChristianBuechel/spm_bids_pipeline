@@ -213,6 +213,10 @@ for sub = 1:n_subs
             fm        = spm_file(epifiles{run},'prefix','rp_a','ext','.txt');
         end
         movement  = normit(load(char(fm)));
+        other_f = char(spm_file(epifiles{run},'prefix','other_','ext','.mat'));
+        if exist(other_f,'file')
+            other_cov = load(other_f);
+        end        
         physio_noise_f = char(spm_file(epifiles{run},'prefix','physio_','ext','.mat'));
         if exist(physio_noise_f,'file')
             physio_noise = load(physio_noise_f);
@@ -244,6 +248,9 @@ for sub = 1:n_subs
         end
         if strfind(noise_corr,'physio')
             all_nuis{run} = [all_nuis{run} normit(physio_noise.physio)];
+        end
+        if strfind(noise_corr,'other')
+            all_nuis{run} = [all_nuis{run} normit(other_cov.other)];
         end
         if strfind(noise_corr,'wm')
             all_nuis{run} = [all_nuis{run} normit(seg_noise.segment(1).data)];
