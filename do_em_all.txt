@@ -1,15 +1,21 @@
 function do_em_all
 
-addpath('d:\lcpa\spm_bids_pipeline\');
+addpath('d:\malepain\spm_bids_pipeline\');
 
 % define subjects that should be included
-all_sub_ids  = [8:14];
+all_sub_ids  = [1:39 41]; % subject number
+%all_sub_ids  = [2:39 41]; % subject number
+all_sub_ids  = [1]; % subject number
 
-%all_sub_ids  = [8];
+do_import   = 0;
 do_preproc  = 0;
 do_qc       = 0;
-do_analysis = 1;
-do_bs       = 0;
+do_analysis = 0;
+do_bs       = 1;
+
+if do_import == 1
+    import_data_ses;
+end
 
 if do_preproc == 1
     % perform slice timing correction

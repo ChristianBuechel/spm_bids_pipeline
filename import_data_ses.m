@@ -91,7 +91,6 @@ for s = 1:numel(import.prisma) % across volunteers
         end
         
         spm_jobman('initcfg');
-        save('test','matlabbatch');
         spm_jobman('run',matlabbatch);
         
         %% now convert EPIs to 4d nifti (and move them) and simply move other images
