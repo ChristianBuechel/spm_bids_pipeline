@@ -72,7 +72,8 @@ for s = 1:numel(import.prisma) % across volunteers
                 all_dicom =  spm_select('FPlist', fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)),'^MR.*');
                 if do_once && strcmp(import.data(tt).dir,'func') % very first epi --> write task-XXX_bold.json file
                     dc   = spm_dicom_headers(all_dicom(1,:));
-                    slt  = dc{1}.Private_0019_1029./1000;
+                    st_ind = find(contains(string(strvcat(dc{1}.CSAImageHeaderInfo.name)),'MosaicRefAcqTimes'));
+                    slt  = str2num(strvcat(dc{1}.CSAImageHeaderInfo(st_ind).item.val))./1000;
                     rt   = dc{1}.RepetitionTime./1000;
                     bold_json = struct('RepetitionTime',rt,'TaskName',vars.task,'SliceTiming',slt);
                     spm_jsonwrite(fullfile(path.preprocDir,sprintf('task-%s_bold.json',vars.task)),bold_json, struct('indent','  '));

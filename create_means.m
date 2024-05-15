@@ -57,8 +57,6 @@ matlabbatch{4}.spm.util.imcalc.input = all_wmean_files;
 matlabbatch{4}.spm.util.imcalc.output = 'var_wmean';
 matlabbatch{4}.spm.util.imcalc.expression = 'var(X)';
 
-
-
 spm_jobman('run',matlabbatch);
 
 end

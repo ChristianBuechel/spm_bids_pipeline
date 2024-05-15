@@ -22,7 +22,7 @@ beta_temp         = 'beta_%04.4d.nii';
 con_templ         = {'con_[0-9][0-9][0-9][0-9]','spmF_[0-9][0-9][0-9][0-9]','spmT_[0-9][0-9][0-9][0-9]','ess_[0-9][0-9][0-9][0-9]'}; 
 
 TR                = vars.sliceTiming.tr;
-parallel          = analysis.parallel;
+parallel          = vars.parallel;
 
 % define what needs to be done
 ana               = analysis.ana;  % 1=FIR, 2=HRF 3=LS-A

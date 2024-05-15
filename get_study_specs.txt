@@ -4,6 +4,7 @@ function [path,vars,analysis,import] = get_study_specs
 path.baseDir     = 'd:\malepain\';
 path.templateDir = 'd:\malepain\spm_bids_pipeline\templates\';
 vars.max_procs   = 12;
+vars.parallel    = 1; %NEW: determines whether parallel computing is used for all routines
 
 % import.prisma        = {{11658,11672},{11659,11673},{11660,11674},{11808,11815},{11809,11816},{11810,11817},{11811,11818},{11895,11911},{11812,11820},{11813,11821},{11872,11885},{11873,11886},{11874,11887},{11875,11888},{11876,11889},{11896,11912},{11897,11913},{11898,11914},{11899,11915},{11942,11955},{11943,11956},{11944,11957},{11945,11958},{12016,12029},{12017,12030},{11974,11986},{11975,11987},{11976,11988},{11977,11989},{11978,11990},{11979,11991},{12019,12031},{12103,12118},{12104,12119},{12105,12120},{12174,12188},{12175,12189},{12176,12190},{12177,12191},{12195,12205}}; % translates to PRISMA_nnn
 % import.prisma_no     = [1            ,2            ,3            ,4            ,5            ,6            ,7            ,8            ,9            ,10           ,11           ,12           ,13           ,14           ,15           ,16           ,17           ,18           ,19           ,20           ,21           ,22           ,23           ,24           ,25           ,26           ,27           ,28           ,29           ,30           ,31           ,32           ,33           ,34           ,35           ,36           ,37           ,38           ,39           ,41]; % subject number
@@ -67,7 +68,7 @@ analysis.group_weights = [1];
 analysis.group_names   = {'All'};
 
 analysis.max_procs         = 12; % how many processes can be used for 1st level analyses
-analysis.parallel          = 1;
+%%analysis.parallel          = 1; THIS HAS BEEN DEPRECATED use vars.parallel instead
 analysis.noise_corr        = ['mov24_wm_csf_roi']; % can contain any combination of "mov6" "mov24" "wm" "csf" "roi" "physio"
 %analysis.noise_corr        = ['mov24_wm'];
 %analysis.noise_corr        = ['physio'];

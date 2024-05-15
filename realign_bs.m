@@ -6,7 +6,6 @@ function realign_bs(all_sub_ids)
 [path,vars]  = get_study_specs;
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
-run_parallel = 1;
 
 % TO DO
 
@@ -122,13 +121,9 @@ if n_procs > vars.max_procs
     n_procs = vars.max_procs;
 end
 
-if run_parallel == 1
+if vars.parallel == 1
     run_spm_parallel(matlabbatch, n_procs);
     %run_spm_multiple(matlabbatch, n_procs);
 else
-    spm_figure('CreateWin', 'Graphics');
-    save('realign_bs','matlabbatch');
-    spm_jobman('run',matlabbatch);
-end
-
+    run_spm_sequential(matlabbatch);
 end
