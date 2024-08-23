@@ -30,7 +30,11 @@ if isfile(import.prisma)
     import.prisma_no = nan(1,numel(x.participant_id));
     for ii = 1:numel(x.participant_id)
         import.prisma_no(ii) = sscanf(upper(x.participant_id{ii}),'SUB-%d');
-        pp = sscanf(x.scan_id{ii},'%d');
+        if isnumeric(x.scan_id) % in case these are numbers...
+            pp = x.scan_id(ii);
+        else
+            pp = sscanf(x.scan_id{ii},'%d');
+        end       
         for gg = 1:numel(pp)
             import.prisma{ii}{gg} = pp(gg);
         end
