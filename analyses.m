@@ -118,6 +118,8 @@ for sub = 1:n_subs
     % for now all sessions are converted to runs
     
     %prepare exclusions
+    epifiles = [];
+    tsvfiles = [];
     
     for ses = 1:vars.nSess
         for run = 1:vars.nRuns
@@ -192,7 +194,12 @@ for sub = 1:n_subs
     template_wls.spm.tools.rwls.fmri_rwls_spec.bases = template.spm.stats.fmri_spec.bases;
     
     a_dir    = fullfile(path.firstlevelDir,sprintf('sub-%02d',sub_id),anadirname);
-    lss_ind = [];
+
+    lss_ind  = [];
+    cond_use = [];
+    z        = [];
+    all_nuis = [];
+    scan_vec = [];
     
     for run = 1:n_run
         func_dir = spm_file(epifiles{run},'path');
