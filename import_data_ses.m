@@ -1,13 +1,40 @@
-function import_data_ses
+function import_data_ses(all_sub_ids)
+
 %
 % Finds scans using dicq, use SFTP to get them, DICOM convert and make 4D
 % and arrange a la BIDS
-% who an what to import is specified in get_study_specs
+% who and what to import is specified in get_study_specs or in
+% participants.tsv
+if nargin<1
+    error('You now need to specify which subjects you want to import, e.g. import_data_ses([2 4 5])');
+end
 [path,vars,~,import] = get_study_specs;
 if isfield(import,'scanner')
     scanner = import.scanner; %if this is TRIO we download TRIO images
 else
     scanner = 'PRISMA';
+end
+%now see whether we have import.prisma and import.prisma_no or everything
+%is in a file (i.e. participants.tsv) in the latter case generate import.prisma and
+%import.prisma_no from the file
+% The column needs to be named 'scan_id'
+% If there are more sessions seperate the PRISMA numbers by spaces NOT
+% tabs e.g.
+% participant_id	sex	age	scan_id
+% sub-09	F	20	25879 25878 
+
+
+if isfile(import.prisma)
+    x = spm_load(import.prisma);
+    import.prisma = [];
+    import.prisma_no = nan(1,numel(x.participant_id));
+    for ii = 1:numel(x.participant_id)
+        import.prisma_no(ii) = sscanf(upper(x.participant_id{ii}),'SUB-%d');
+        pp = sscanf(x.scan_id{ii},'%d');
+        for gg = 1:numel(pp)
+            import.prisma{ii}{gg} = pp(gg);
+        end
+    end
 end
 
 do_once = 1;
@@ -19,14 +46,19 @@ spm_save(fullfile(path.preprocDir,'.bidsignore.'),sprintf('**/%s_*_ftp.txt',scan
 descr = struct('Name',vars.task,'BIDSVersion','1.0.2');
 spm_jsonwrite(fullfile(path.preprocDir,'dataset_description.json'),descr, struct('indent','  ')); % create description file
 
-for s = 1:numel(import.prisma) % across volunteers
-    mkdir(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)));%
-    
-    for ses = 1:numel(import.prisma{s})
+for s = 1:numel(all_sub_ids) % across volunteers
+    c_sub = all_sub_ids(s);
+    ind_c = find(import.prisma_no==c_sub);
+    if isempty(ind_c)
+        error(sprintf('Subject %d is not listed. Abort\n',c_sub));
+    end
+    Volunteer(s).no = c_sub;
+    mkdir(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no));%
+    for ses = 1:numel(import.prisma{ind_c})
         fi = 1;ftp_cmd = [];
-        Volunteer(s).sess(ses).ID = sprintf('%s_%d',scanner,import.prisma{s}{ses});
-        ftp_file = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('%s_ftp.txt',Volunteer(s).sess(ses).ID)); %create SFTP batch file
-        fprintf('Doing #%d session %d (%s) \n',import.prisma_no(s),ses,Volunteer(s).sess(ses).ID);
+        Volunteer(s).sess(ses).ID = sprintf('%s_%d',scanner,import.prisma{ind_c}{ses});
+        ftp_file = fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('%s_ftp.txt',Volunteer(s).sess(ses).ID)); %create SFTP batch file
+        fprintf('Doing sub #%d session %d (%s) \n',Volunteer(s).no,ses,Volunteer(s).sess(ses).ID);
         if isunix
             [status, result] = system(sprintf('ssh %s@%s netapp dicq -f --series --exam=%s',import.user,import.server,Volunteer(s).sess(ses).ID),'-echo'); % query DICOM database
         else
@@ -41,15 +73,15 @@ for s = 1:numel(import.prisma) % across volunteers
             run = 1;
             ind = find(contains(list_of_series,import.data(tt).seq)); % find series that match
             for g = ind
-                mkdir(fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses)),import.data(tt).dir); % create BIDS dir
+                mkdir(fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses)),import.data(tt).dir); % create BIDS dir
                 [n,p,ser] = parse_series(list_of_series{g});
                 if eval(import.data(tt).cond)
-                    mkdir(fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir),sprintf('%s_%d_%d',import.data(tt).type,ses,run)); % create temp dir for dicom files
+                    mkdir(fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir),sprintf('%s_%d_%d',import.data(tt).type,ses,run)); % create temp dir for dicom files
                     Volunteer(s).sess(ses).data{tt}(run).path   = p;
                     Volunteer(s).sess(ses).data{tt}(run).nscans = n;
                     Volunteer(s).sess(ses).data{tt}(run).series = ser;
                     Volunteer(s).sess(ses).data{tt}(run).mod    = import.data(tt).dir;
-                    ftp_cmd{fi} = ['lcd ' fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run))]; fi = fi + 1;
+                    ftp_cmd{fi} = ['lcd ' fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run))]; fi = fi + 1;
                     ftp_cmd{fi} = ['cd ' p]; fi = fi + 1;
                     ftp_cmd{fi} = ['mget MR.*']; fi = fi + 1; % create entry into SFTP batch to get all dicom files in that dir
                     run = run + 1;
@@ -69,7 +101,7 @@ for s = 1:numel(import.prisma) % across volunteers
         g = 1;
         for tt = 1:numel(Volunteer(s).sess(ses).data)
             for run = 1:numel(Volunteer(s).sess(ses).data{tt})
-                all_dicom =  spm_select('FPlist', fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)),'^MR.*');
+                all_dicom =  spm_select('FPlist', fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)),'^MR.*');
                 if do_once && strcmp(import.data(tt).dir,'func') % very first epi --> write task-XXX_bold.json file
                     dc   = spm_dicom_headers(all_dicom(1,:));
                     st_ind = find(contains(string(strvcat(dc{1}.CSAImageHeaderInfo.name)),'MosaicRefAcqTimes'));
@@ -81,8 +113,8 @@ for s = 1:numel(import.prisma) % across volunteers
                 end
                 matlabbatch{g}.spm.util.import.dicom.data = cellstr(all_dicom);
                 matlabbatch{g}.spm.util.import.dicom.root = 'flat';
-                final_del_dir = strvcat(final_del_dir,fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)));
-                matlabbatch{g}.spm.util.import.dicom.outdir = {fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run))};
+                final_del_dir = strvcat(final_del_dir,fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)));
+                matlabbatch{g}.spm.util.import.dicom.outdir = {fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run))};
                 matlabbatch{g}.spm.util.import.dicom.protfilter = '.*';
                 matlabbatch{g}.spm.util.import.dicom.convopts.format = 'nii';
                 matlabbatch{g}.spm.util.import.dicom.convopts.meta = 1;
@@ -100,78 +132,78 @@ for s = 1:numel(import.prisma) % across volunteers
         for tt = 1:numel(Volunteer(s).sess(ses).data)
             for run = 1:numel(Volunteer(s).sess(ses).data{tt})
                 if strcmp(Volunteer(s).sess(ses).data{tt}(run).mod,'func')
-                    ff = dir(fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run),'*.nii'));
+                    ff = dir(fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run),'*.nii'));
                     if size(unique(cat(1,ff.bytes)),1) == 2 % indicates we have 2 series eg spinal + brain, where size(spinal)<size(brain)
                         large = cat(1,ff.bytes) > mean(cat(1,ff.bytes));
-                        large_f = spm_file(strvcat(ff(large).name),'path',fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)));                        
+                        large_f = spm_file(strvcat(ff(large).name),'path',fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)));
                         large_f(1:import.dummies,:) = []; %remove dummies
                         b = spm_jsonread(spm_file(large_f(end,:),'ext','json'));
                         dat_tim = [datestr(b.acqpar.AcquisitionDate) ' ' char(duration(0,0,b.acqpar.AcquisitionTime))]; % create date time str of last EPI
                         matlabbatch{g}.spm.util.cat.vols = cellstr(large_f);
-                        matlabbatch{g}.spm.util.cat.name = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',import.prisma_no(s),ses,vars.task,run,'brain'));
+                        matlabbatch{g}.spm.util.cat.name = fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',Volunteer(s).no,ses,vars.task,run,'brain'));
                         matlabbatch{g}.spm.util.cat.dtype = 4;
                         matlabbatch{g}.spm.util.cat.RT = vars.sliceTiming.tr;
-                        g = g + 1;                        
-                        matlabbatch{g}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',import.prisma_no(s),ses,vars.task,run,'brain'));
+                        g = g + 1;
+                        matlabbatch{g}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',Volunteer(s).no,ses,vars.task,run,'brain'));
                         matlabbatch{g}.cfg_basicio.run_ops.call_matlab.inputs{2}.string = dat_tim;
                         matlabbatch{g}.cfg_basicio.run_ops.call_matlab.outputs = {};
                         matlabbatch{g}.cfg_basicio.run_ops.call_matlab.fun = 'add_time_epi';
-                        g = g + 1;                                                
-                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.files = cellstr(fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',import.prisma_no(s),ses,vars.task,run,'brain')));
-                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.outdir = cellstr(fullfile(path.baseDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir));
+                        g = g + 1;
+                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.files = cellstr(fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',Volunteer(s).no,ses,vars.task,run,'brain')));
+                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.outdir = cellstr(fullfile(path.baseDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir));
                         matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.keep = true;
                         g = g + 1;
-                        small_f = spm_file(strvcat(ff(~large).name),'path',fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)));
+                        small_f = spm_file(strvcat(ff(~large).name),'path',fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)));
                         small_f(1:import.dummies,:) = []; %remove dummies
                         matlabbatch{g}.spm.util.cat.vols = cellstr(small_f);
-                        matlabbatch{g}.spm.util.cat.name = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',import.prisma_no(s),ses,vars.task,run,'spinal'));
+                        matlabbatch{g}.spm.util.cat.name = fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',Volunteer(s).no,ses,vars.task,run,'spinal'));
                         matlabbatch{g}.spm.util.cat.dtype = 4;
                         matlabbatch{g}.spm.util.cat.RT = vars.sliceTiming.tr;
-                        g = g + 1;                        
-                        matlabbatch{g}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',import.prisma_no(s),ses,vars.task,run,'spinal'));
+                        g = g + 1;
+                        matlabbatch{g}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',Volunteer(s).no,ses,vars.task,run,'spinal'));
                         matlabbatch{g}.cfg_basicio.run_ops.call_matlab.inputs{2}.string = dat_tim;
                         matlabbatch{g}.cfg_basicio.run_ops.call_matlab.outputs = {};
                         matlabbatch{g}.cfg_basicio.run_ops.call_matlab.fun = 'add_time_epi';
-                        g = g + 1;                                                                       
-                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.files = cellstr(fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',import.prisma_no(s),ses,vars.task,run,'spinal')));
-                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.outdir = cellstr(fullfile(path.baseDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir));
+                        g = g + 1;
+                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.files = cellstr(fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_acq-%s_bold.nii',Volunteer(s).no,ses,vars.task,run,'spinal')));
+                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.outdir = cellstr(fullfile(path.baseDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir));
                         matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.keep = true;
                         g = g + 1;
                         
                     else % just one EPI e.g. brain
-                        all_f = spm_file(strvcat(ff.name),'path',fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)));
-                        all_f(1:import.dummies,:) = []; %remove dummies                        
+                        all_f = spm_file(strvcat(ff.name),'path',fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)));
+                        all_f(1:import.dummies,:) = []; %remove dummies
                         b = spm_jsonread(spm_file(all_f(end,:),'ext','json'));
-                        dat_tim = [datestr(b.acqpar.AcquisitionDate) ' ' char(duration(0,0,b.acqpar.AcquisitionTime))]; % create date time str of last EPI                        
+                        dat_tim = [datestr(b.acqpar.AcquisitionDate) ' ' char(duration(0,0,b.acqpar.AcquisitionTime))]; % create date time str of last EPI
                         matlabbatch{g}.spm.util.cat.vols = cellstr(all_f);
-                        matlabbatch{g}.spm.util.cat.name = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_bold.nii',import.prisma_no(s),ses,vars.task,run));
+                        matlabbatch{g}.spm.util.cat.name = fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_bold.nii',Volunteer(s).no,ses,vars.task,run));
                         matlabbatch{g}.spm.util.cat.dtype = 4;
                         matlabbatch{g}.spm.util.cat.RT = vars.sliceTiming.tr;
-                        g = g + 1;                        
-                        matlabbatch{g}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_bold.nii',import.prisma_no(s),ses,vars.task,run));
+                        g = g + 1;
+                        matlabbatch{g}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_bold.nii',Volunteer(s).no,ses,vars.task,run));
                         matlabbatch{g}.cfg_basicio.run_ops.call_matlab.inputs{2}.string = dat_tim;
                         matlabbatch{g}.cfg_basicio.run_ops.call_matlab.outputs = {};
                         matlabbatch{g}.cfg_basicio.run_ops.call_matlab.fun = 'add_time_epi';
-                        g = g + 1;                        
-                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.files = cellstr(fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_bold.nii',import.prisma_no(s),ses,vars.task,run)));
-                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.outdir = cellstr(fullfile(path.baseDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir));
+                        g = g + 1;
+                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.files = cellstr(fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_task-%s_run-%2.2d_bold.nii',Volunteer(s).no,ses,vars.task,run)));
+                        matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.outdir = cellstr(fullfile(path.baseDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir));
                         matlabbatch{g}.cfg_basicio.file_dir.file_ops.cfg_gzip_files.keep = true;
                         g = g + 1;
                     end
                 elseif (strcmp(Volunteer(s).sess(ses).data{tt}(run).mod,'anat') || strcmp(Volunteer(s).sess(ses).data{tt}(run).mod,'blip') || strcmp(Volunteer(s).sess(ses).data{tt}(run).mod,'fmap'))
-                    source = spm_select('FPlist',fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)),sprintf('^s%s.*\\.nii$',scanner));
+                    source = spm_select('FPlist',fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('%s_%d_%d',import.data(tt).type,ses,run)),sprintf('^s%s.*\\.nii$',scanner));
                     if size(source,1) > 1 % e.g. 2 magnitude images for fieldmap
                         for si=1:size(source,1)
-                            target = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_%s%d.nii',import.prisma_no(s),ses,import.data(tt).type,si));
+                            target = fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_%s%d.nii',Volunteer(s).no,ses,import.data(tt).type,si));
                             movefile(source(si,:),target);
-                            mkdir(fullfile(path.baseDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir));
-                            spm_copy(target,fullfile(path.baseDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir),'gzip',true);
+                            mkdir(fullfile(path.baseDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir));
+                            spm_copy(target,fullfile(path.baseDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir),'gzip',true);
                         end
                     else
-                        target = fullfile(path.preprocDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_%s.nii',import.prisma_no(s),ses,import.data(tt).type));
+                        target = fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir,sprintf('sub-%2.2d_ses-%2.2d_%s.nii',Volunteer(s).no,ses,import.data(tt).type));
                         movefile(source,target);
-                        mkdir(fullfile(path.baseDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir));
-                        spm_copy(target,fullfile(path.baseDir,sprintf('sub-%2.2d',import.prisma_no(s)),sprintf('ses-%2.2d',ses),import.data(tt).dir),'gzip',true);
+                        mkdir(fullfile(path.baseDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir));
+                        spm_copy(target,fullfile(path.baseDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('ses-%2.2d',ses),import.data(tt).dir),'gzip',true);
                     end
                 end
             end

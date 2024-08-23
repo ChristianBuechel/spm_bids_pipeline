@@ -1,4 +1,4 @@
-function [path,vars,analysis,import] = get_study_specs
+function [path,vars,analysis,import,qc] = get_study_specs
 
 %% path definitions
 path.baseDir     = 'd:\malepain\';
@@ -8,14 +8,10 @@ vars.parallel    = 1; %NEW: determines whether parallel computing is used for al
 
 % import.prisma        = {{11658,11672},{11659,11673},{11660,11674},{11808,11815},{11809,11816},{11810,11817},{11811,11818},{11895,11911},{11812,11820},{11813,11821},{11872,11885},{11873,11886},{11874,11887},{11875,11888},{11876,11889},{11896,11912},{11897,11913},{11898,11914},{11899,11915},{11942,11955},{11943,11956},{11944,11957},{11945,11958},{12016,12029},{12017,12030},{11974,11986},{11975,11987},{11976,11988},{11977,11989},{11978,11990},{11979,11991},{12019,12031},{12103,12118},{12104,12119},{12105,12120},{12174,12188},{12175,12189},{12176,12190},{12177,12191},{12195,12205}}; % translates to PRISMA_nnn
 % import.prisma_no     = [1            ,2            ,3            ,4            ,5            ,6            ,7            ,8            ,9            ,10           ,11           ,12           ,13           ,14           ,15           ,16           ,17           ,18           ,19           ,20           ,21           ,22           ,23           ,24           ,25           ,26           ,27           ,28           ,29           ,30           ,31           ,32           ,33           ,34           ,35           ,36           ,37           ,38           ,39           ,41]; % subject number
-%  
-% import.prisma        = {{11658,11672}};                   
-% import.prisma_no     = [1            ];
+  
 
-import.prisma        = {{11809,11816},{11810,11817},{11811,11818},{11895,11911},{11812,11820},{11813,11821},{11872,11885},{11873,11886},{11874,11887},{11875,11888},{11876,11889},{11896,11912},{11897,11913},{11898,11914},{11899,11915},{11942,11955},{11943,11956},{11944,11957},{11945,11958},{12016,12029},{12017,12030},{11974,11986},{11975,11987},{11976,11988},{11977,11989},{11978,11990},{11979,11991},{12019,12031},{12103,12118},{12104,12119},{12105,12120},{12174,12188},{12175,12189},{12176,12190},{12177,12191},{12195,12205}}; % translates to PRISMA_nnn
-import.prisma_no     = [5            ,6            ,7            ,8            ,9            ,10           ,11           ,12           ,13           ,14           ,15           ,16           ,17           ,18           ,19           ,20           ,21           ,22           ,23           ,24           ,25           ,26           ,27           ,28           ,29           ,30           ,31           ,32           ,33           ,34           ,35           ,36           ,37           ,38           ,39           ,41]; % subject number
-
-
+% Or you can specify a file: 
+% import.prisma    = 'd:\painact\derivatives\spm_preprocessing\participants.tsv';
 
 import.user          = 'buechel';
 import.server        = 'revelations.nin.uke.uni-hamburg.de';
@@ -46,8 +42,9 @@ vars.skullStripID    = 'skull-strip-T1.nii';
 vars.T1maskID        = 'brain_mask.nii';
 vars.templateID      = 'cb_Template_%d_Dartel.nii';
 vars.templateT1ID    = 'cb_Template_T1.nii';
-%vars.groupMaskID     = 'brainmask.nii';
 vars.groupMaskID     = 'neuromorphometrics.nii';
+vars.brainstemID     = 'Cerebellum_SUIT_05.nii'; % or 'brainstem_mask.nii'
+vars.templateStripID = 'cb_Template_SkullStrip.nii';
 
 %% this need to be adapted to your study / computer--------------
 vars.task        = 'malepain';
@@ -59,9 +56,28 @@ vars.sliceTiming.tr       = 2.58; % in s
 vars.sliceTiming.nslices  = 40;
 vars.sliceTiming.refslice = 1290;
 
+%file name for mov regressors
+qc.movFilename  = 'noise_mov_rasub-%02d_ses-%02d_task-%s_run-%02d_bold.mat';
+
+%thresholds for movement inspection
+qc.threshSpike     = 0.7; %threshold for spikes
+qc.threshMov       = 3; %threshold for overall movement within 1 run or between runs
+qc.percSpike       = 0.05; %threshold in % in number of volumes that are discarded because of spikes
+
+%% display options
+
+qc.maxDisImg       = 7; %number of subject images displayed at once (not all numbers make sense here, 7 means a 4x2 display including template, otherwise try 5(3x2))
+qc.contour         = 1; %1: template contour is displayed on images; 0: is not displayed
+
+%% first level related qc
+
+qc.tThresh         = 1.7; %t-value threshold, only values above this threshold will be shown
+qc.tMapSmoothK     = 4; %smoothing kernel for t-map
+qc.overlayColor    = [1 0 0]; %color for overlay (here red)
+
 
 % the next section can be used to define different groups for 2nd level analysis
-analysis.all_subs  = [1:39 41]; % very all;
+analysis.all_subs  = [1:39 41]; % all;
 single_group       = ones(size(analysis.all_subs));
 analysis.group_ind  = single_group; %index 1
 analysis.group_weights = [1];

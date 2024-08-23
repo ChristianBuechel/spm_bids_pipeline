@@ -1,5 +1,5 @@
 function analyses(all_sub_ids)
-% example for a 1st löevel and secopnd level anaylsis function
+% does 1st level and second level analyses 
 
 %% Prepare everything
 % now read in stuff form get_study_specs
@@ -115,18 +115,24 @@ for sub = 1:n_subs
         warning('This routine will collapse all sessions into a single one !')
     end
     cnt        = 1;
-    % for now all essions are converted to runs
+    % for now all sessions are converted to runs
+    
+    %prepare exclusions
+    
     for ses = 1:vars.nSess
         for run = 1:vars.nRuns
-            epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi = epi(1); % if there are brain and spinal, just take brain
-            epifiles{cnt} = epi;
-            tsv = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','events');
-            tsvfiles{cnt} = tsv;
-            cnt           = cnt + 1;
+            if (~isfield(analysis,'exclude')) || (not_excluded(analysis.exclude,sub_id,ses,run)) 
+                epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+                epi = epi(1); % if there are brain and spinal, just take brain
+                epifiles{cnt} = epi;
+                tsv = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','events');
+                tsvfiles{cnt} = tsv;
+                cnt           = cnt + 1;
+            end
         end
     end
-    n_run      = vars.nRuns*vars.nSess;
+    %n_run      = vars.nRuns*vars.nSess;
+    n_run      = cnt - 1; % already incremented in loop
     n_o_run    = n_run; % keep original as # of runs get set to 1 for concatenate
     
     % get relevant dirs
@@ -166,7 +172,8 @@ for sub = 1:n_subs
     template_wls.spm.tools.rwls.fmri_rwls_spec.cvi = 'wls'; % here we differ
     
     if bs == 1
-        template.spm.stats.fmri_spec.mask           = cellstr(fullfile(mean_dir,'bins3cbrainstem_mask.nii')); % specify which voxels to analyse
+        bs_file    = fullfile(path.templateDir,vars.brainstemID);
+        template.spm.stats.fmri_spec.mask           = cellstr(fullfile(mean_dir,spm_file(spm_file(bs_file,'prefix','bins3c'),'filename'))); % specify which voxels to analyse
         template_wls.spm.tools.rwls.fmri_rwls_spec.mask = template.spm.stats.fmri_spec.mask;
     else
         template.spm.stats.fmri_spec.mask           = cellstr(fullfile(mean_dir,'s3rbrain_mask.nii'));
@@ -190,7 +197,7 @@ for sub = 1:n_subs
     for run = 1:n_run
         func_dir = spm_file(epifiles{run},'path');
         
-        % first get min and max onset to trim scans not yet implemented
+        % first get min and max onset to trim scans, not yet implemented
         min_onset = Inf;
         max_onset = -Inf;
         x = spm_load(char(spm_file(tsvfiles{run},'suffix', analysis.events))); % load onset *.tsv file; analysis.events allows different tsv files
@@ -213,26 +220,8 @@ for sub = 1:n_subs
             fm        = spm_file(epifiles{run},'prefix','rp_a','ext','.txt');
         end
         movement  = normit(load(char(fm)));
-        other_f = char(spm_file(epifiles{run},'prefix','other_','ext','.mat'));
-        if exist(other_f,'file')
-            other_cov = load(other_f);
-        end        
-        physio_noise_f = char(spm_file(epifiles{run},'prefix','physio_','ext','.mat'));
-        if exist(physio_noise_f,'file')
-            physio_noise = load(physio_noise_f);
-        end
-        seg_noise_bs_f = char(spm_file(epifiles{run},'prefix','noise_csf_bra','ext','.mat'));
-        if exist(seg_noise_bs_f,'file')
-            seg_noise_bs = load(seg_noise_bs_f);
-        end
-        seg_noise_f = char(spm_file(epifiles{run},'prefix','noise_wm_csf_ra','ext','.mat'));
-        if exist(seg_noise_f,'file')
-            seg_noise = load(seg_noise_f);
-        end
-        roi_noise_f = char(spm_file(epifiles{run},'prefix','noise_roi_ra','ext','.mat'));
-        if exist(roi_noise_f,'file')
-            roi_noise = load(roi_noise_f);
-        end
+
+       
         mov_final     = normit(movement);
         mov_final_d   = diff(mov_final);
         mov_final_d   = normit([mov_final_d(1,:); mov_final_d]);
@@ -246,25 +235,66 @@ for sub = 1:n_subs
         elseif strfind(noise_corr,'mov24')
             all_nuis{run} = [all_nuis{run} mov_final mov_final_2 mov_final_d mov_final_d_2];
         end
+        
+        % other nuisance variables
+        
         if strfind(noise_corr,'physio')
-            all_nuis{run} = [all_nuis{run} normit(physio_noise.physio)];
-        end
-        if strfind(noise_corr,'other')
-            all_nuis{run} = [all_nuis{run} normit(other_cov.other)];
-        end
-        if strfind(noise_corr,'wm')
-            all_nuis{run} = [all_nuis{run} normit(seg_noise.segment(1).data)];
-        end
-        if strfind(noise_corr,'csf')
-            if bs == 1
-                all_nuis{run} = [all_nuis{run} normit(seg_noise_bs.segment(1).data)];
-            else
-                all_nuis{run} = [all_nuis{run} normit(seg_noise.segment(2).data)];
+            physio_noise_f = char(spm_file(epifiles{run},'prefix','physio_','ext','.mat'));
+            if exist(physio_noise_f,'file')
+                physio_noise = load(physio_noise_f);                
+                all_nuis{run} = [all_nuis{run} normit(physio_noise.physio)];
             end
         end
+        
+        if strfind(noise_corr,'other')
+            other_f = char(spm_file(epifiles{run},'prefix','other_','ext','.mat'));
+            if exist(other_f,'file')
+                other_cov = load(other_f);
+                all_nuis{run} = [all_nuis{run} normit(other_cov.other)];
+            end
+        end
+         
+        
+        if strfind(noise_corr,'wm')
+            seg_noise_f = char(spm_file(epifiles{run},'prefix','noise_wm_csf_ra','ext','.mat'));
+            if exist(seg_noise_f,'file')
+                seg_noise = load(seg_noise_f);
+                all_nuis{run} = [all_nuis{run} normit(seg_noise.segment(1).data)];
+            end
+        end
+        
+        
+        if strfind(noise_corr,'csf')
+            if bs == 1
+                seg_noise_bs_f = char(spm_file(epifiles{run},'prefix','noise_csf_bra','ext','.mat'));
+                if exist(seg_noise_bs_f,'file')
+                    seg_noise_bs = load(seg_noise_bs_f);
+                    all_nuis{run} = [all_nuis{run} normit(seg_noise_bs.segment(1).data)];
+                end
+            else
+                seg_noise_f = char(spm_file(epifiles{run},'prefix','noise_wm_csf_ra','ext','.mat'));
+                if exist(seg_noise_f,'file')
+                    seg_noise = load(seg_noise_f);
+                    all_nuis{run} = [all_nuis{run} normit(seg_noise.segment(2).data)];
+                end
+            end
+        end
+        
         if strfind(noise_corr,'roi')
-            all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(1).data)];
-            all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(2).data)];
+            roi_noise_f = char(spm_file(epifiles{run},'prefix','noise_roi_ra','ext','.mat'));
+            if exist(roi_noise_f,'file')
+                roi_noise = load(roi_noise_f);                
+                all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(1).data)];
+                all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(2).data)];
+            end
+        end
+        
+        if strfind(noise_corr,'movnoise')
+            mov_noise_f = char(spm_file(epifiles{run},'prefix','noise_mov_ra','ext','.mat'));
+            if exist(mov_noise_f,'file')
+                mov_noise = load(mov_noise_f);
+                all_nuis{run} = [all_nuis{run} mov_noise.mov_reg];
+            end
         end
         
         n_nuis         = size(all_nuis{run},2);
@@ -543,7 +573,8 @@ for sub = 1:n_subs
     % additional t-constrasts as specified in get_study_specs, these will also be as one sample t-tests
     if ~isempty(t_con)
         add_con_ind = [];
-        for co = 1:size(t_con_names,2)
+        %for co = 1:size(t_con_names,2)
+        for co = 1:numel(t_con_names)
             template.spm.stats.con.consess{ind+fco}.tcon.name    = [t_con_names{co}];
             all_t_con_names{ind}                                 = [t_con_names{co}];
             template.spm.stats.con.consess{ind+fco}.tcon.convec  = (simple_con'*t_con(co,:)')'; % nicely takes the weights from the simple t cons into account
@@ -662,10 +693,10 @@ if do_one_t
     cc    = corrcoef(t_con');
     [~,c] = find(triu(cc)<-.9999999999); % all in c are redundant
     pruned_t_con_names = t_con_names;
-    %pruned_t_con_names(c) = [];
+    pruned_t_con_names(c) = [];
     pruned_add_con_ind = add_con_ind;
-    %pruned_add_con_ind(c) = [];
-    for co = 1:size(pruned_t_con_names,2)
+    pruned_add_con_ind(c) = [];
+    for co = 1:numel(pruned_t_con_names)
         out_dir = fullfile(path.secondlevelDir,[addon '_' anadirname '_' sm_str '_' pruned_t_con_names{co}]);
         out_dir = strrep(out_dir,'>','_bt_'); % these chars are not allowed in directory names ...
         out_dir = strrep(out_dir,'<','_st_');
@@ -756,7 +787,7 @@ if do_fact || do_fact_con
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).gmsca = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).ancova = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).name = 'CONDITION';
-    matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).dept = 0;
+    matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).dept = 1;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).variance = 1;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).gmsca = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).ancova = 0;
@@ -867,3 +898,20 @@ function Y = normit(X)
 %normalise X to zero mean, std unity
 Y = X - ones(size(X,1),1)*mean(X); %zero mean
 Y = Y ./ (ones(size(Y,1),1)*std(Y)); %std 1
+
+
+function out = not_excluded(ana_ex,sub_id,ses,run)
+% check whether this run should be in the analysis
+% not very elegant
+out = 1;
+for i_ae = 1:numel(ana_ex)
+    if ana_ex(i_ae).sub == sub_id
+        if ana_ex(i_ae).ses == ses
+            for i_run = 1:numel(ana_ex(i_ae).run)
+                if ana_ex(i_ae).run(i_run) == run
+                    out = 0;
+                end
+            end
+        end
+    end
+end

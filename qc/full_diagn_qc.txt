@@ -1,0 +1,79 @@
+function full_diagn_qc
+
+addpath(genpath('d:\painact\spm_bids_pipeline\'));
+
+
+% define subjects that should be included
+subIDs      = [4]; % subject number
+
+%!!!!!Be careful here!!!!
+%Variables need to be defined below for correct
+%first level dir and correct t-map/con number
+fLevelDir   = 'mov24_wm_csf_roi_painact_hrf_0_None'; %name of first level analysis
+tMapNumber  = 47; %t-map/con number of your main effect (e.g. pain, motor)
+eventName   = ''; %if not empty will look for provided event names in tsv file and plot onsets of event together with movement parameter
+
+checkID     = 0;
+checkMov    = 1;
+dispMov     = 0;
+dispCoreg   = 0;
+dispNorm    = 0;
+dispfLMask  = 0;
+dispCon     = 0;
+
+%% check prisma and subIDs
+
+if checkID == 1
+    %this function compares time stamps between MRI and behavioral files
+    %a mismatch could indicate that PRISMA ID and sub ID provided in
+    %participants.tsv do not match
+    %does require event.tsv files and run-wise behavioral mat files in a beh
+    %folder locates at same level as func!!!!!!!
+    check_subjectID(subIDs);
+end
+
+%% check movement
+
+if checkMov == 1
+    %diagnostic script to plot movement, find problematic movement and create
+    %noise regressors for first-level analyses based on spike movement
+    movReg = 1;  %if 1, finds spike movement and saves noise regressors that can be used in first level analysis
+    check_movement(subIDs,movReg,eventName);
+end
+
+if dispMov == 1
+    %show mean epi and all first run epis for every sub
+    disp_mov_images(subIDs);
+end
+
+%% check coregistration and normalisation
+
+if dispCoreg == 1
+    %check for every sub whether non-linear coreg of mean epi to anat was succesful
+    %contour can be switched off in get_study_specs (qc.contour)
+    disp_coreg_images(subIDs);
+end
+
+if dispNorm == 1
+    %show normalised files of all subs, either skull strip or mean epi
+    %contour can be switched off in get_study_specs (qc.contour)
+    whichFile = 1; % 1: skull strip; 2: mean epi
+    disp_norm_images(subIDs,whichFile);
+end
+
+%% check first level analyses
+
+if dispfLMask == 1
+    %show normalised first level masks of all subs 
+    %contour can be switched off in get_study_specs (qc.contour)
+    disp_mask_images(subIDs,fLevelDir);
+end
+
+if dispCon == 1
+    %show normalised, smoothed, thresholded t-map for main effect in every sub
+    check_flevel_tmap(subIDs,fLevelDir,tMapNumber)
+end
+
+end
+
+

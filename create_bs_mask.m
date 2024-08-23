@@ -24,7 +24,7 @@ for sub = 1:n_subs
     u_rc1_file = spm_file(struc_file,'prefix','u_rc1');
 
     
-    bs_file    = fullfile(path.templateDir,'brainstem_mask.nii');
+    bs_file    = fullfile(path.templateDir,vars.brainstemID);
     
     flowfield_epi =  fullfile(func_dir,'y_epi_2_template.nii');
     flowfield_T1  =  fullfile(func_dir,'y_epi_2_T1.nii');

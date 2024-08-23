@@ -19,7 +19,7 @@ for sub = 1:n_subs
     epi        = epi(1); % if there are brain and spinal, just take brain
     func_dir   = spm_file(epi,'path');
     
-    bs_file    = fullfile(path.templateDir,'brainstem_mask.nii');
+    bs_file    = fullfile(path.templateDir,vars.brainstemID);
     c_files{1} = spm_file(bs_file,'prefix','c3','path',anat_dir);
    
     cm_file        = spm_file(epi,'prefix','cmeana');
