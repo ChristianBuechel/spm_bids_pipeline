@@ -94,6 +94,12 @@ cond_names        = analysis.cond_names;
 n_cond            = numel(cond_names);
 t_con             = analysis.t_con;
 t_con_names       = analysis.t_con_names;
+if isfield(analysis,'f_con_names') && isfield(analysis,'f_con')
+    f_con             = analysis.f_con;
+    f_con_names       = analysis.f_con_names;
+end
+
+
 
 % assemble directory name
 anadirname  = [noise_corr '_' name_ana '_' num2str(shift) '_' cvi];
@@ -879,6 +885,12 @@ if do_fact_con
     matlabbatch{1}.spm.stats.con.consess{co}.fcon.convec = {Fc.c'};
     co = co + 1; %increment
     
+    %do F-contrasts
+    for fc=1:numel(f_con_names)
+        matlabbatch{1}.spm.stats.con.consess{co}.fcon.name   = f_con_names{fc};
+        matlabbatch{1}.spm.stats.con.consess{co}.fcon.convec = f_con{fc};
+        co = co + 1; %increment
+    end
     for gw = 1:numel(group_names)
         for tc = 1:numel(t_con_names)
             matlabbatch{1}.spm.stats.con.consess{co}.tcon.name    = [group_names{gw} '_' t_con_names{tc}];
