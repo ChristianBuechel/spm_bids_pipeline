@@ -6,7 +6,7 @@ function analyses(all_sub_ids)
 [path,vars,analysis]  = get_study_specs;
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
-
+del_all      = 0;
 n_groups     = max(analysis.group_ind);
 
 for g = 1:n_groups
@@ -97,6 +97,9 @@ t_con_names       = analysis.t_con_names;
 if isfield(analysis,'f_con_names') && isfield(analysis,'f_con')
     f_con             = analysis.f_con;
     f_con_names       = analysis.f_con_names;
+else
+    f_con             = [];
+    f_con_names       = [];
 end
 
 
@@ -190,7 +193,11 @@ for sub = 1:n_subs
     
     
     if ana == 1 % FIR
-        template.spm.stats.fmri_spec.bases.fir.length = TR*n_base;
+        if isfield(analysis,'bin_size')
+            template.spm.stats.fmri_spec.bases.fir.length = analysis.bin_size*n_base;
+        else
+            template.spm.stats.fmri_spec.bases.fir.length = TR*n_base;
+        end
         template.spm.stats.fmri_spec.bases.fir.order  = n_base;
         
     elseif ana == 2 || ana == 3 % HRF (also for LSA LSS)
@@ -463,6 +470,26 @@ for sub = 1:n_subs
     end
     
     if do_model
+        if exist(a_dir,'dir') == 7
+            str = {[a_dir ' : contains SPM estimation files']};
+            if del_all
+                ret = 1;
+            else
+                ret = spm_input(str,1,'bd','abort mission|del dir|del ALL dirs',[0,1,2],1);
+            end
+            
+            if ret == 0
+                spm('Pointer','Arrow')
+                return
+            end
+            if ret == 1
+                rmdir(a_dir,'s'); % delete all    
+            end
+            if ret == 2
+                del_all = 1;
+                rmdir(a_dir,'s'); % delete all    
+            end
+        end
         mkdir(a_dir);
         copyfile(which(mfilename),a_dir); % copy this file into analysis directory
         copyfile(which('get_study_specs'),a_dir); % and copy this file as it contains everything necessary to repeat the analysis
