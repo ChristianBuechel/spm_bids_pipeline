@@ -1,5 +1,5 @@
 function analyses(all_sub_ids)
-% does 1st level and second level analyses 
+% does 1st level and second level analyses
 
 %% Prepare everything
 % now read in stuff form get_study_specs
@@ -19,7 +19,7 @@ group_names   = analysis.group_names;
 % house keeping
 con_temp          = 'con_%04.4d.nii';
 beta_temp         = 'beta_%04.4d.nii';
-con_templ         = {'con_[0-9][0-9][0-9][0-9]','spmF_[0-9][0-9][0-9][0-9]','spmT_[0-9][0-9][0-9][0-9]','ess_[0-9][0-9][0-9][0-9]'}; 
+con_templ         = {'con_[0-9][0-9][0-9][0-9]','spmF_[0-9][0-9][0-9][0-9]','spmT_[0-9][0-9][0-9][0-9]','ess_[0-9][0-9][0-9][0-9]'};
 
 TR                = vars.sliceTiming.tr;
 parallel          = vars.parallel;
@@ -71,7 +71,7 @@ mat_name          = which(mfilename);
 [~,mat_name,~]    = fileparts(mat_name);
 
 if ana == 1 % FIR
-    warp_beta         = 0;
+    warp_beta         = 0; % only one should be 1
     warp_con          = 1;
 end
 
@@ -83,6 +83,11 @@ end
 if ana == 3 % HRF LS-A / LSS
     warp_beta         = 1;
     warp_con          = 0;
+end
+
+if concatenate % simple cons do not make sense
+    warp_beta         = 1;
+    warp_con          = 1;
 end
 
 n_base            = analysis.n_base; % # of basis functions (FIR model)
@@ -132,7 +137,7 @@ for sub = 1:n_subs
     
     for ses = 1:vars.nSess
         for run = 1:vars.nRuns
-            if (~isfield(analysis,'exclude')) || (not_excluded(analysis.exclude,sub_id,ses,run)) 
+            if (~isfield(analysis,'exclude')) || (not_excluded(analysis.exclude,sub_id,ses,run))
                 epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
                 epi = epi(1); % if there are brain and spinal, just take brain
                 epifiles{cnt} = epi;
@@ -207,7 +212,7 @@ for sub = 1:n_subs
     template_wls.spm.tools.rwls.fmri_rwls_spec.bases = template.spm.stats.fmri_spec.bases;
     
     a_dir    = fullfile(path.firstlevelDir,sprintf('sub-%02d',sub_id),anadirname);
-
+    
     lss_ind  = [];
     cond_use = [];
     z        = [];
@@ -232,7 +237,7 @@ for sub = 1:n_subs
                 max_onset   = max([max_onset c_onset]); % think about leaving about 8s worth of scans after last event
             end
         end
-             
+        
         % then get the nuisance vectors (movement, wm, csf etc)
         if bs == 1
             fm        = spm_file(epifiles{run},'prefix','rp_ba','ext','.txt');
@@ -240,8 +245,8 @@ for sub = 1:n_subs
             fm        = spm_file(epifiles{run},'prefix','rp_a','ext','.txt');
         end
         movement  = normit(load(char(fm)));
-
-       
+        
+        
         mov_final     = normit(movement);
         mov_final_d   = diff(mov_final);
         mov_final_d   = normit([mov_final_d(1,:); mov_final_d]);
@@ -261,7 +266,7 @@ for sub = 1:n_subs
         if strfind(noise_corr,'physio')
             physio_noise_f = char(spm_file(epifiles{run},'prefix','physio_','ext','.mat'));
             if exist(physio_noise_f,'file')
-                physio_noise = load(physio_noise_f);                
+                physio_noise = load(physio_noise_f);
                 all_nuis{run} = [all_nuis{run} normit(physio_noise.physio)];
             end
         end
@@ -273,7 +278,7 @@ for sub = 1:n_subs
                 all_nuis{run} = [all_nuis{run} normit(other_cov.other)];
             end
         end
-         
+        
         
         if strfind(noise_corr,'wm')
             seg_noise_f = char(spm_file(epifiles{run},'prefix','noise_wm_csf_ra','ext','.mat'));
@@ -303,7 +308,7 @@ for sub = 1:n_subs
         if strfind(noise_corr,'roi')
             roi_noise_f = char(spm_file(epifiles{run},'prefix','noise_roi_ra','ext','.mat'));
             if exist(roi_noise_f,'file')
-                roi_noise = load(roi_noise_f);                
+                roi_noise = load(roi_noise_f);
                 all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(1).data)];
                 all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(2).data)];
             end
@@ -393,6 +398,7 @@ for sub = 1:n_subs
             end
         end
         
+        template.spm.stats.fmri_spec.sess(run).regress = []; %so it exists
         for nuis = 1:n_nuis % add nuisance variables to batch
             template.spm.stats.fmri_spec.sess(run).regress(nuis) = struct('name', cellstr(num2str(nuis)), 'val', all_nuis{run}(:,nuis));
         end
@@ -483,11 +489,11 @@ for sub = 1:n_subs
                 return
             end
             if ret == 1
-                rmdir(a_dir,'s'); % delete all    
+                rmdir(a_dir,'s'); % delete all
             end
             if ret == 2
                 del_all = 1;
-                rmdir(a_dir,'s'); % delete all    
+                rmdir(a_dir,'s'); % delete all
             end
         end
         mkdir(a_dir);
@@ -585,7 +591,7 @@ for sub = 1:n_subs
     
     % now do the simple cons for 2nd level anova
     % simply go through the eoi (f_vec) line by line and correct by # of occurrence
-    if ana == 1 || ana == 2
+    if (ana == 1 || ana == 2)
         simple_con_ind = [];simple_beta_ind = [];
         simple_con = zeros(n_cond*n_base,size(f_vec,2));
         ind = 1;
@@ -598,12 +604,14 @@ for sub = 1:n_subs
                 end
                 for i_fir = 1:n_base % take care of FIR bins
                     simple_con(ind,:) = f_vec(ind,:)./sum(f_vec(ind,:)); % scale to 1
-                    template.spm.stats.con.consess{ind+fco}.tcon.name    = [label '_' num2str(i_fir)];
-                    all_t_con_names{ind}                                 = [label '_' num2str(i_fir)];
-                    template.spm.stats.con.consess{ind+fco}.tcon.convec  = simple_con(ind,:);
-                    template.spm.stats.con.consess{ind+fco}.tcon.sessrep = 'none';
+                    all_t_con_names{ind}  = [label '_' num2str(i_fir)];
                     simple_con_ind  = [simple_con_ind ind+fco];
                     simple_beta_ind = [simple_beta_ind ind];
+                    if ~concatenate
+                        template.spm.stats.con.consess{ind+fco}.tcon.name    = [label '_' num2str(i_fir)];
+                        template.spm.stats.con.consess{ind+fco}.tcon.convec  = simple_con(ind,:);
+                        template.spm.stats.con.consess{ind+fco}.tcon.sessrep = 'none';
+                    end
                     ind = ind + 1;
                 end
             end
@@ -612,6 +620,10 @@ for sub = 1:n_subs
     
     % additional t-constrasts as specified in get_study_specs, these will also be as one sample t-tests
     if ~isempty(t_con)
+        if concatenate
+            ind = 1; %reset counter as we have not dcreated those t-cons
+            all_t_con_names = [];
+        end
         add_con_ind = [];
         %for co = 1:size(t_con_names,2)
         for co = 1:numel(t_con_names)
@@ -625,7 +637,7 @@ for sub = 1:n_subs
     end
     
     if do_cons
-        % get old con files to delete them *con* *spmT* *spmF* *ess* 
+        % get old con files to delete them *con* *spmT* *spmF* *ess*
         old_con_files = [''];
         for cc = i:numel(con_templ)
             old_con_files = strvcat(old_con_files,spm_select('FPList',a_dir,con_templ{cc}));
@@ -705,8 +717,8 @@ if ~isempty(matlabbatch)
     % run matlabbatch
     n_procs = n_subs; % to not block to many cores on the server
     
-    if n_procs > analysis.max_procs
-        n_procs = analysis.max_procs;
+    if n_procs > vars.max_procs
+        n_procs = vars.max_procs;
     end
     
     if parallel == 1
@@ -729,7 +741,7 @@ if do_one_t
     end
     addon   = [addon 'ONE_T'];
     % first let's get rid of negative contrasts --> commented (see below) as it removes
-    % too many cons (e.g. [1 0] and [1 -1] are correlated with -1 ...) 
+    % too many cons (e.g. [1 0] and [1 -1] are correlated with -1 ...)
     cc    = corrcoef(t_con');
     [~,c] = find(triu(cc)<-.9999999999); % all in c are redundant
     pruned_t_con_names = t_con_names;
@@ -753,6 +765,7 @@ if do_one_t
             if warp_con
                 swcon_file = fullfile(a_dir, sprintf(con_temp,pruned_add_con_ind(co)));
             end
+
             if analysis.use_vasa == 1
                 swcon_file = spm_file(swcon_file,'prefix',sprintf('%swv',s_string));
             else
@@ -848,11 +861,11 @@ if do_fact || do_fact_con
                 a_dir       = fullfile(path.firstlevelDir, name, anadirname);
                 s_string    = sprintf('s%s',sm_str);
                 if analysis.skernel == 0;s_string = '';end
-                if warp_beta
-                    swcon_file = fullfile(a_dir, sprintf(beta_temp,simple_beta_ind(co)));
-                end
                 if warp_con
                     swcon_file = fullfile(a_dir, sprintf(con_temp,simple_con_ind(co)));
+                end
+                if warp_beta
+                    swcon_file = fullfile(a_dir, sprintf(beta_temp,simple_beta_ind(co)));
                 end
                 if analysis.use_vasa == 1
                     swcon_file = spm_file(swcon_file,'prefix',sprintf('%swv',s_string));

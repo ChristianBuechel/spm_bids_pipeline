@@ -14,9 +14,9 @@ if isfield(import,'scanner')
 else
     scanner = 'PRISMA';
 end
-%now see whether we have import.prisma and import.prisma_no or everything
-%is in a file (i.e. participants.tsv) in the latter case generate import.prisma and
-%import.prisma_no from the file
+% now see whether we have import.prisma and import.prisma_no or everything
+% is in a file (i.e. participants.tsv) in the latter case generate import.prisma and
+% import.prisma_no from the file
 % The column needs to be named 'scan_id'
 % If there are more sessions seperate the PRISMA numbers by spaces NOT
 % tabs e.g.
@@ -24,7 +24,7 @@ end
 % sub-09	F	20	25879 25878 
 
 
-if isfile(import.prisma)
+if ischar(import.prisma) & isfile(import.prisma)
     x = spm_load(import.prisma);
     import.prisma = [];
     import.prisma_no = nan(1,numel(x.participant_id));
@@ -42,8 +42,20 @@ if isfile(import.prisma)
 end
 
 do_once = 1;
-if ~isunix
-    pw = passcode; %assumes that under unix you are already logged on
+
+if ispc
+    machina = 'win_loc';
+elseif isunix
+    [status, ~] = system('netapp dicq'); % 1 if netapp dicq is found, i.e. we are on a server
+    if status == 1
+        machina = 'lin_ser';
+    else
+        machina = 'lin_loc';
+    end
+end
+
+if strcmp(machina,'win_loc') |  strcmp(machina,'lin_loc') % only for those we need a pw
+    pw = passcode; % assumes that on the server you are already logged in
 end
 mkdir(path.preprocDir); % create coarse directory structure
 spm_save(fullfile(path.preprocDir,'.bidsignore.'),sprintf('**/%s_*_ftp.txt',scanner)); % creates .bidsignore file
@@ -63,11 +75,16 @@ for s = 1:numel(all_sub_ids) % across volunteers
         Volunteer(s).sess(ses).ID = sprintf('%s_%d',scanner,import.prisma{ind_c}{ses});
         ftp_file = fullfile(path.preprocDir,sprintf('sub-%2.2d',Volunteer(s).no),sprintf('%s_ftp.txt',Volunteer(s).sess(ses).ID)); %create SFTP batch file
         fprintf('Doing sub #%d session %d (%s) \n',Volunteer(s).no,ses,Volunteer(s).sess(ses).ID);
-        if isunix
+
+        switch machina
+            case 'lin_ser'
             [status, result] = system(sprintf('ssh %s@%s netapp dicq -f --series --exam=%s',import.user,import.server,Volunteer(s).sess(ses).ID),'-echo'); % query DICOM database
-        else
+            case 'win_loc'
             [status, result] = system(sprintf('plink -ssh %s@%s -pw %s netapp dicq -f --series --exam=%s',import.user,import.server,pw,Volunteer(s).sess(ses).ID),'-echo');
+            case 'lin_loc'
+            [status, result] = system(sprintf('SSHPASS=%s sshpass -e ssh %s@%s netapp dicq -f --series --exam=%s',pw, import.user,import.server,Volunteer(s).sess(ses).ID),'-echo');
         end
+        
         if status ~= 0
             error('cannot retrieve output from dicq');
         end
@@ -93,12 +110,15 @@ for s = 1:numel(all_sub_ids) % across volunteers
             end
         end
         spm_save(ftp_file,ftp_cmd);
-        %% get the data
-        if isunix
+        %% get the data        
+         switch machina
+            case 'lin_ser'
             [status, result] = system(sprintf('sftp -b %s %s@%s',ftp_file,import.user,import.server),'-echo'); %simply run the SFTP batch
-        else
+            case 'win_loc'
             [status, result] = system(sprintf('psftp %s@%s -pw %s -b %s',import.user,import.server,pw,ftp_file),'-echo');
-        end
+            case 'lin_loc'
+            [status, result] = system(sprintf('SSHPASS=%s sshpass -e sftp -o BatchMode=no -b %s -o PubkeyAuthentication=no %s@%s',pw, ftp_file,import.user,import.server),'-echo');
+         end        
         %% now do DICOM conversion within temp dir
         final_del_dir = []; % keep track of temp dirs to later delete them
         matlabbatch  = [];
