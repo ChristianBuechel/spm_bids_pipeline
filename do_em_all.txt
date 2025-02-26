@@ -1,11 +1,10 @@
 function do_em_all
 
-addpath(genpath('c:\Users\buechel\Documents\MATLAB\spm_bids_pipeline\'));
+addpath(genpath('c:\Users\buechel\Documents\MATLAB\spm_bids_pipeline\')); % specify path to bids pipeline 
 
 % define subjects that should be included
 all_sub_ids  = [8:25 27:50]; % subject number
 
-all_sub_ids  = [8:15]; % start with three
 do_import       = 0;
 do_preproc_nlin = 0;
 do_preproc_vdm  = 0;

@@ -10,6 +10,17 @@ function create_fieldmap(all_sub_ids)
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 
+% check for FieldMaop toolbox and get T1 image
+all_tb        = spm('TBs');
+all_tb_names  = cellstr(strvcat(all_tb.name));
+FM_tb_present = any(contains(all_tb_names,'FieldMap'));
+if ~FM_tb_present
+    error('FieldMap toolbox missing. Please install the toolbox');
+else
+    FM_tb_dir = all_tb(contains(all_tb_names,'FieldMap')).dir;
+    FM_templ  = fullfile(FM_tb_dir,'T1.nii');
+end
+
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     all_meta_pd    = spm_BIDS(BIDS,'metadata','sub',sprintf('%02d',sub_id),'type','phasediff'); % get the 2 echo times from the json files
@@ -56,7 +67,7 @@ for sub = 1:n_subs
     template.spm.tools.fieldmap.calculatevdm.subj.anat = {''};
     template.spm.tools.fieldmap.calculatevdm.subj.matchanat = 0;
     template.spm.tools.fieldmap.calculatevdm.subj.matchvdm = 1;
-    template.spm.tools.fieldmap.calculatevdm.subj.defaults.defaultsval.mflags.template = {'C:\Users\buechel\Documents\MATLAB\spm\toolbox\FieldMap\T1.nii'};
+    template.spm.tools.fieldmap.calculatevdm.subj.defaults.defaultsval.mflags.template = {FM_templ};
     % we have 2 cases: 1) a PM for each run 2) one PM per session
     if sum(have_pm(:)) == prod(size(have_pm)) % one pm per run
         gi  = 1;

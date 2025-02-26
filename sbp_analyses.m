@@ -1,6 +1,64 @@
-function analyses(all_sub_ids)
-% does 1st level and second level analyses
+function sbp_analyses(all_sub_ids)
+% function sbp_analyses(all_sub_ids)
+% performs 1st level and 2nd level analyses of all_sub_ids
+%
+% calls get_study_specs.m to get various options in the structure analysis.XXX 
+% 
+% analysis.exclude           : struct array with fields "sub" "ses" and "run" e.g. analysis.exclude(1) = struct('sub',3, 'ses',1,'run',[5 6]); 
+%                              exclude runs 5 and 6 in session 1 subject 3; NB only run can be a vector!!
+% analysis.sess              : vector of sessions to be analyzed order is preserved e.g. [2 1];
+% analysis.prune             : use only those scans for which we have events defined in this analysis (plus 8s after last event+duration)  
+% analysis.concatenate       : concatenate runs  
+% analysis.ana               : 1 - FIR, 2 - hrf, 3 - lsa
+% analysis.name_ana          : name for the analysis (part of directory name)
+% analysis.lss               : do least squares separate analysis according to Mumford et al. based on lsa analysis (ana = 3)
+% analysis.n_base            : number of basis functions (ie number of FIR bins);
+% analysis.bin_size          : bin size for FIR anaylsis in TRs (1 if not sopecified)
+% analysis.events            : suffix for the onset TSV file e.g. '_lsa' will use file *_lsa.tsv
+% analysis.cond_names        : condition names that the analysis will use, need to be exactly as specified in tsv file
+% analysis.p_mod             : cell array with an entry for each condition, listing parametric modulators (more than one possible)
+%                            : e.g. for three conditions, where the 2nd will use parametric modulators RT and int {{},{'RT','int'},{}}
+%                            : name of the parametric modulator needs to be exactly as in the tsv file (columns 4..n)              
+% analysis.t_con             : n t-contrasts as a n x conditions(plus parametric modulators) matrix
+% analysis.t_con_names       : cell array of n strings
+% analysis.f_con             : cell array of f_con matrices (only performed in 2nd level analyses)
+% analysis.f_con_names       : cell array of n strings (only performed in 2nd level analyses)
+% analysis.skernel           : smoothing kernel to use can be scalar or 1x3 vector (for anisotropic smoothing) 
+% analysis.shift             : add a constant to all onsets (in TRs)
+%
+%
+% analysis.do_model          : create first level model
+% analysis.bs                : perform brainstem specific analysis (not fully implemented yet)
+% analysis.do_est            : estimate first level model
+%
+% analysis.do_vasa           : estimate vasa maps
+% analysis.do_correct_vasa   : correct con and beta images using vasa estimates
+% analysis.use_vasa          : use vasa corrected maps for 2nd level
+%
+% analysis.do_cons           : estimate contrasts
+% analysis.do_warp           : perform appropriate warping to get con/beta images to template space for 2nd level analyses;
+% analysis.do_smooth         : smooth warped images 
+%
+% analysis.noise_corr        : a string that can contain the following words to indicate which noise regressors 
+%                              to include: "mov6" "mov24" "physio" "other" "wm" "csf" "roi" "movnoise" (see code for specific forma of the *.txt or *.mat files)
+%
+% analysis.cvi               : non-sphericity either "none" "AR(1)" "FAST" or "wls" (NB "wls" requires the wls toolbox by Joern Diedrichsen)
+% analysis.hpf               : High pass filter in s
+% analysis.do_fact           : perform 2nd level anova w/o subject constants
+% analysis.do_fact_con       : estimate t-contrasts for group 
+%
+% analysis.do_one_t          : perform one sample t-tests for all t-contrasts
+%
+% one can also define groups of subjects 
+% analysis.group_weights     : adds a level of contrasts at the group level (e.g. [1 1;1 -1;-1 1] - tests for common and different patterns for 2 groups)
+% analysis.group_ana_names   : name of group levels e.g. {'All','Sporty>Lazy','Lazy>Sporty'};
+% analysis.all_subs          : subjects to include
+% analysis.group_ind         : vector with indices saying who belongs to which group (e.g. sporty = 1, lazy = 2) same size as analysis.group_ind
+% if field "group_ind" does not exist in analysis all subjects are included in a single group 
 
+ 
+    
+% 
 %% Prepare everything
 % now read in stuff form get_study_specs
 [path,vars,analysis]  = get_study_specs;
@@ -34,6 +92,7 @@ concatenate     = analysis.concatenate;
 
 do_model        = analysis.do_model;
 bs              = analysis.bs;
+prune           = analysis.prune;
 do_est          = analysis.do_est ;
 do_vasa         = analysis.do_vasa;
 do_cons         = analysis.do_cons;
@@ -46,6 +105,25 @@ do_fact         = analysis.do_fact;
 do_fact_con     = analysis.do_fact_con;
 
 do_one_t        = analysis.do_one_t;
+
+if isfield(analysis,'sess')
+    sess_2_ana = analysis.sess;
+else
+    sess_2_ana = 1:vars.nSess;
+end
+
+if ~isfield(analysis,'group_ind')
+    analysis.group_weights = 1;
+    analysis.group_ana_names   = {'All'};
+    analysis.all_subs      = all_sub_ids;
+    analysis.group_ind     = ones(1,numel(all_sub_ids));
+end
+
+if ~isempty(analysis.t_con)
+    warp_a_con        = 1; % additional cons need to be warped
+else
+    warp_a_con        = 0; % additional cons need to be warped
+end
 
 % other things
 noise_corr        = analysis.noise_corr; % the whole lot
@@ -63,28 +141,29 @@ mat_name          = which(mfilename);
 [~,mat_name,~]    = fileparts(mat_name);
 
 if ana == 1 % FIR
-    warp_beta         = 0; % only one should be 1
-    warp_con          = 1;
+    warp_beta         = 0; 
+    warp_s_con        = 1; % simple cons
+    
 end
 
 if ana == 2 % HRF
     warp_beta         = 0;
-    warp_con          = 1;
+    warp_s_con        = 1; % simple cons
 end
 
 if ana == 3 % HRF LS-A / LSS
     warp_beta         = 1;
-    warp_con          = 0;
+    warp_s_con        = 0; % do not warp simple cons
 end
 
-if concatenate % simple cons do not make sense
+if concatenate % simple cons are not required as we can use the betas, but the other cons should be warped
     warp_beta         = 1;
-    warp_con          = 1;
+    warp_s_con        = 0; % not simple cons       
 end
 
 n_base            = analysis.n_base; % # of basis functions (FIR model)
-
 name_ana          = analysis.name_ana;
+
 
 % assemble directory name
 anadirname  = [noise_corr '_' name_ana '_' num2str(shift) '_' cvi];
@@ -102,40 +181,43 @@ matlabbatch = [];
 for sub = 1:n_subs
     mbi        = 1;
     sub_id     = all_sub_ids(sub);
-    if vars.nSess > 1
+    if numel(sess_2_ana) > 1
         warning('This routine will collapse all sessions into a single one !')
     end
-    cnt        = 1;
+    cnt        = 0;
     % for now all sessions are converted to runs
     
     %prepare exclusions
     epifiles = [];
     tsvfiles = [];
     
-    for ses = 1:vars.nSess
+    % harvest epifiles and tsvfiles and honor exclusions
+    for i_ses = 1:numel(sess_2_ana)
+    ses = sess_2_ana(i_ses);
         for run = 1:vars.nRuns
             if (~isfield(analysis,'exclude')) || (not_excluded(analysis.exclude,sub_id,ses,run))
+                cnt = cnt + 1;
                 epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
                 epi = epi(1); % if there are brain and spinal, just take brain
                 epifiles{cnt} = epi;
-                tsv = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','events');
-                tsvfiles{cnt} = tsv;
-                cnt           = cnt + 1;
+                tsv = strrep(epi,'_bold.nii','_events.tsv'); % change BOLD filename to proper tsv file name
+                tsvfiles{cnt} = char(spm_file(tsv,'suffix', analysis.events)); % ... and add suffix
             end
         end
     end
-    %n_run      = vars.nRuns*vars.nSess;
-    n_run      = cnt - 1; % already incremented in loop
-    n_o_run    = n_run; % keep original as # of runs get set to 1 for concatenate
+    n_run      = cnt; 
+    n_o_run    = n_run; % keep original # of runs bc they will be set to 1 when we concatenate
     
     % get relevant dirs
     struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
     struc_file = struc_file(1); % if there are more than 1
-    u_rc1_file = spm_file(struc_file,'prefix','u_rc1');
     
-    mean_dir = spm_file(epifiles{1},'path');
+    % now that we can analyse all sessions seperately, we need the 1st ses, 1st run for the mean epi and the deformations
+    m_epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');%ses 1, run 1
+    m_epi = m_epi(1); % if there are brain and spinal, just take brain
+    mean_dir = spm_file(m_epi,'path'); % 
     
-    template = []; template_wls = []; % everything will first go into a template struc and added to matlabbatch as needed
+    template = []; template_wls = []; % everything will first go into a template struct and added to matlabbatch as needed
     
     template.spm.stats.fmri_spec.timing.units   = 'scans';
     template_wls.spm.tools.rwls.fmri_rwls_spec.timing.units = template.spm.stats.fmri_spec.timing.units; % duplicate everything for WLS
@@ -200,7 +282,7 @@ for sub = 1:n_subs
         % go through all runs get min, max onset to trim scans and find conditions that are never used
         min_onset = Inf;
         max_onset = -Inf;
-        x = spm_load(char(spm_file(tsvfiles{run},'suffix', analysis.events))); % load onset *.tsv file; analysis.events allows different tsv files
+        x = spm_load(char(tsvfiles{run})); % load onset *.tsv file; analysis.events allows different tsv files
         if isnumeric(x.trial_type) % the rare case that all conditions are numbers...
             x.trial_type = strtrim(cellstr(num2str(x.trial_type)));
         end
@@ -209,11 +291,24 @@ for sub = 1:n_subs
             if ~isempty(t_ind) || (concatenate == 1) % allow empty in some runs when concatenate, bc other runs have the condition
                 cond_exist(run,ii) = ~isempty(t_ind); % nevertheless track what we have
                 c_onset     = (x.onset(t_ind)')./TR + shift; % times in tsv files are in seconds according to BIDS
+                c_dur       = (x.duration(t_ind)')./TR;
                 min_onset   = min([min_onset c_onset]); % this can then be used to trim scans
-                max_onset   = max([max_onset c_onset]); % think about leaving 8s worth of scans after last event
+                max_onset   = max([max_onset c_onset+c_dur]); % add duration !!
             end
         end
-        scan_range{run} = [min_onset max_onset];
+        
+        func_dir = spm_file(epifiles{run},'path');
+        if bs == 1
+            scans = spm_select('ExtFPlist', func_dir,spm_file(spm_file(epifiles{run},'filename'),'prefix','^bra'),Inf);
+        else
+            scans = spm_select('ExtFPlist', func_dir,spm_file(spm_file(epifiles{run},'filename'),'prefix','^ra'),Inf);
+        end
+        if prune == 1
+            scan_range{run} = [max(floor(min_onset),1) min(ceil(max_onset + 8./TR),size(scans,1))]; %leave + 8s at the end,
+            fprintf('Sub # %d run %d : orig scans: 1-%d will be pruned to %d-%d \n',sub_id,run,size(scans,1),scan_range{run}(1),scan_range{run}(2));
+        else
+            scan_range{run} = [1 size(scans,1)];
+        end
     end
     
     % fix things for non-existing conditions
@@ -236,13 +331,19 @@ for sub = 1:n_subs
 
     p_mod           = analysis.p_mod(any_cond_exist); % prune pmods
 
-    if any(~i_reg)
-        preserve   = find(~any(analysis.t_con(:,~i_reg),2)); % keep only those cons where we do not have weights in missing conds (incl param mods)
+    if ~isempty(analysis.t_con)
+        if any(~i_reg)
+            preserve   = find(~any(analysis.t_con(:,~i_reg),2)); % keep only those cons where we do not have weights in missing conds (incl param mods)
+        else
+            preserve   = 1:size(analysis.t_con,1);
+        end
+        t_con      = analysis.t_con(preserve,find(i_reg)); % prune t_con
+        t_con_names= analysis.t_con_names(preserve); % ... and their names
     else
-        preserve   = 1:size(analysis.t_con,1);
+        t_con      = []; 
+        t_con_names= []; 
     end
-    t_con      = analysis.t_con(preserve,find(i_reg)); % prune t_con
-    t_con_names= analysis.t_con_names(preserve); % ... and their names
+    
     cond_names = analysis.cond_names(any_cond_exist); % and prune conditions
     n_cond     = numel(cond_names);
     % from here on the 1st level analysis proceeds as if we only are
@@ -268,6 +369,7 @@ for sub = 1:n_subs
             fm        = spm_file(epifiles{run},'prefix','rp_a','ext','.txt');
         end
         movement  = normit(load(char(fm)));
+        movement  = movement(scan_range{run}(1):scan_range{run}(2),:); %cut
         
         mov_final     = normit(movement);
         mov_final_d   = diff(mov_final);
@@ -289,6 +391,7 @@ for sub = 1:n_subs
             physio_noise_f = char(spm_file(epifiles{run},'prefix','physio_','ext','.mat'));
             if exist(physio_noise_f,'file')
                 physio_noise = load(physio_noise_f);
+                physio_noise  = physio_noise(scan_range{run}(1):scan_range{run}(2),:); %cut
                 all_nuis{run} = [all_nuis{run} normit(physio_noise.physio)];
             end
         end
@@ -297,6 +400,7 @@ for sub = 1:n_subs
             other_f = char(spm_file(epifiles{run},'prefix','other_','ext','.mat'));
             if exist(other_f,'file')
                 other_cov = load(other_f);
+                other_cov  = other_cov(scan_range{run}(1):scan_range{run}(2),:); %cut                
                 all_nuis{run} = [all_nuis{run} normit(other_cov.other)];
             end
         end
@@ -305,7 +409,8 @@ for sub = 1:n_subs
             seg_noise_f = char(spm_file(epifiles{run},'prefix','noise_wm_csf_ra','ext','.mat'));
             if exist(seg_noise_f,'file')
                 seg_noise = load(seg_noise_f);
-                all_nuis{run} = [all_nuis{run} normit(seg_noise.segment(1).data)];
+                seg_noise_wm  = normit(seg_noise.segment(1).data(scan_range{run}(1):scan_range{run}(2),:)); %cut                
+                all_nuis{run} = [all_nuis{run} seg_noise_wm];
             end
         end
         
@@ -314,13 +419,15 @@ for sub = 1:n_subs
                 seg_noise_bs_f = char(spm_file(epifiles{run},'prefix','noise_csf_bra','ext','.mat'));
                 if exist(seg_noise_bs_f,'file')
                     seg_noise_bs = load(seg_noise_bs_f);
-                    all_nuis{run} = [all_nuis{run} normit(seg_noise_bs.segment(1).data)];
+                    seg_noise_bs_csf  = normit(seg_noise_bs.segment(2).data(scan_range{run}(1):scan_range{run}(2),:)); %cut                                    
+                    all_nuis{run} = [all_nuis{run} seg_noise_bs_csf];
                 end
             else
                 seg_noise_f = char(spm_file(epifiles{run},'prefix','noise_wm_csf_ra','ext','.mat'));
                 if exist(seg_noise_f,'file')
                     seg_noise = load(seg_noise_f);
-                    all_nuis{run} = [all_nuis{run} normit(seg_noise.segment(2).data)];
+                    seg_noise_csf  = normit(seg_noise.segment(2).data(scan_range{run}(1):scan_range{run}(2),:)); %cut                                    
+                    all_nuis{run} = [all_nuis{run} seg_noise_csf];
                 end
             end
         end
@@ -329,8 +436,11 @@ for sub = 1:n_subs
             roi_noise_f = char(spm_file(epifiles{run},'prefix','noise_roi_ra','ext','.mat'));
             if exist(roi_noise_f,'file')
                 roi_noise = load(roi_noise_f);
-                all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(1).data)];
-                all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(2).data)];
+                %cut
+                noise_roi_1  = normit(roi_noise.roi(1).data(scan_range{run}(1):scan_range{run}(2),:)); %cut                                    
+                noise_roi_2  = normit(roi_noise.roi(2).data(scan_range{run}(1):scan_range{run}(2),:)); %cut                                    
+                all_nuis{run} = [all_nuis{run} noise_roi_1];
+                all_nuis{run} = [all_nuis{run} noise_roi_2];
             end
         end
         
@@ -338,7 +448,8 @@ for sub = 1:n_subs
             mov_noise_f = char(spm_file(epifiles{run},'prefix','noise_mov_ra','ext','.mat'));
             if exist(mov_noise_f,'file')
                 mov_noise = load(mov_noise_f);
-                all_nuis{run} = [all_nuis{run} mov_noise.mov_reg];
+                mov_noise_1  = normit(mov_noise.mov_reg(scan_range{run}(1):scan_range{run}(2),:)); %cut                                    
+                all_nuis{run} = [all_nuis{run} mov_noise_1];
             end
         end
         
@@ -350,7 +461,9 @@ for sub = 1:n_subs
             scans = spm_select('ExtFPlist', func_dir,spm_file(spm_file(epifiles{run},'filename'),'prefix','^bra'),Inf);
         else
             scans = spm_select('ExtFPlist', func_dir,spm_file(spm_file(epifiles{run},'filename'),'prefix','^ra'),Inf);
-        end % here one would need to cut the scans
+        end
+        
+        scans  = scans(scan_range{run}(1):scan_range{run}(2),:); %cut    
         % create vector of number of scans for possible concatenation
         scan_vec(run) = size(scans,1);
         
@@ -359,7 +472,7 @@ for sub = 1:n_subs
         template.spm.stats.fmri_spec.sess(run).multi_reg = {''};
         template.spm.stats.fmri_spec.sess(run).hpf       = analysis.hpf;
         
-        x = spm_load(char(spm_file(tsvfiles{run},'suffix', analysis.events))); % load onset *.tsv file; analysis.events allows different tsv files
+        x = spm_load(tsvfiles{run}); % load onset *.tsv file; analysis.events allows different tsv files
         if isnumeric(x.trial_type) % the rare case that all conditions are numbers...
             x.trial_type = strtrim(cellstr(num2str(x.trial_type)));
         end
@@ -370,6 +483,7 @@ for sub = 1:n_subs
                 cond_use{run} = [cond_use{run} ii]; 
                 RES(cnt).name      = cond_names{ii};
                 RES(cnt).onset     = (x.onset(t_ind)')./TR + shift; % times in tsv files are in seconds according to BIDS
+                RES(cnt).onset     = RES(cnt).onset - (scan_range{run}(1) - 1); %correct for cuts                    
                 RES(cnt).duration  = (x.duration(t_ind)')./TR;
                 if ana == 1 % FIR always has duration of 0
                     RES(cnt).duration  = zeros(size(x.duration(t_ind)'));
@@ -390,7 +504,7 @@ for sub = 1:n_subs
             end
         end
         % expand all conditions for LS-A type analysis
-        ind  = 1;all = [];
+        all = [];
         for r = 1:numel(RES)
             new = []; % help contruct to hold all events
             new(:,1) = RES(r).onset';
@@ -522,7 +636,7 @@ for sub = 1:n_subs
         copyfile(which(mfilename),a_dir); % copy this file into analysis directory
         copyfile(which('get_study_specs'),a_dir); % and copy this file as it contains everything necessary to repeat the analysis
         for ts = 1:numel(tsvfiles)
-            copyfile(char(spm_file(tsvfiles{ts},'suffix', analysis.events)),a_dir); % and copy the respective *.tsv files that were used
+            copyfile(tsvfiles{ts},a_dir); % and copy the respective *.tsv files that were used
         end
         template.spm.stats.fmri_spec.dir = {[a_dir]};
         template_wls.spm.tools.rwls.fmri_rwls_spec.dir = template.spm.stats.fmri_spec.dir;
@@ -613,54 +727,57 @@ for sub = 1:n_subs
     
     % now do the simple cons for 2nd level anova
     % simply go through the eoi (f_vec) li-+ne by line and correct by # of occurrence
-    if (ana == 1 || ana == 2)
-        simple_con_ind{sub} = [];simple_beta_ind{sub} = [];
-        simple_con = zeros(n_cond*n_base,size(f_vec,2));
-        ind = 1;
-        for co = 1:n_cond
-            for pm = 1:n_reg(co)
-                if pm == 1
-                    label = [cond_names{co} '_main' ]; % the event itself
-                else
-                    label = [cond_names{co} '_' p_mod{co}{pm-1}]; % the parametric regressors
-                end
-                for i_fir = 1:n_base % take care of FIR bins
-                    simple_con(ind,:) = f_vec(ind,:)./sum(f_vec(ind,:)); % scale to 1
-                    all_t_con_names{ind}  = [label '_' num2str(i_fir)];
-                    simple_con_ind{sub}  = [simple_con_ind{sub} ind+fco];
-                    simple_beta_ind{sub} = [simple_beta_ind{sub} ind];
-                    if ~concatenate
-                        template.spm.stats.con.consess{ind+fco}.tcon.name    = [label '_' num2str(i_fir)];
-                        template.spm.stats.con.consess{ind+fco}.tcon.convec  = simple_con(ind,:);
-                        template.spm.stats.con.consess{ind+fco}.tcon.sessrep = 'none';
-                    end
-                    ind = ind + 1;
+    ind_t = 1;ind_b = 1;
+    %    if warp_s_con || warp_a_con
+    simple_con_ind{sub} = [];simple_beta_ind{sub} = [];
+    all_t_con_names = [];
+    simple_con = zeros(n_cond*n_base,size(f_vec,2));
+    for co = 1:n_cond
+        for pm = 1:n_reg(co)
+            if pm == 1
+                label = [cond_names{co} '_main' ]; % the event itself
+            else
+                label = [cond_names{co} '_' p_mod{co}{pm-1}]; % the parametric regressors
+            end
+            for i_fir = 1:n_base % take care of FIR bins
+                simple_beta_ind{sub} = [simple_beta_ind{sub} ind_b];
+                simple_con(ind_b,:) = f_vec(ind_b,:)./sum(f_vec(ind_b,:)); % scale to 1
+                ind_b = ind_b + 1;
+                
+                if warp_s_con
+                    all_t_con_names{ind_t}  = [label '_' num2str(i_fir)];
+                    simple_con_ind{sub}  = [simple_con_ind{sub} ind_t+fco];
+                    template.spm.stats.con.consess{ind_t+fco}.tcon.name    = [label '_' num2str(i_fir)];
+                    template.spm.stats.con.consess{ind_t+fco}.tcon.convec  = simple_con(ind_t,:);
+                    template.spm.stats.con.consess{ind_t+fco}.tcon.sessrep = 'none';
+                    ind_t = ind_t + 1;
                 end
             end
         end
     end
+    %    end
     
     % additional t-constrasts as specified in get_study_specs, these will also be used as one sample t-tests
     if ~isempty(t_con)
-        if concatenate
-            ind = 1; % reset counter as we have not created those t-cons
-            all_t_con_names = [];
-        end
+%         if concatenate
+%             ind = 1; % reset counter as we have not created those t-cons
+%             all_t_con_names = [];
+%         end
         add_con_ind = [];
         for co = 1:numel(t_con_names)
-            template.spm.stats.con.consess{ind+fco}.tcon.name    = [t_con_names{co}];
-            all_t_con_names{ind}                                 = [t_con_names{co}];
-            template.spm.stats.con.consess{ind+fco}.tcon.convec  = (simple_con'*t_con(co,:)')'; % nicely takes the weights from the simple t cons into account
-            template.spm.stats.con.consess{ind+fco}.tcon.sessrep = 'none';
-            add_con_ind  = [add_con_ind ind+fco];
-            ind = ind + 1;
+            template.spm.stats.con.consess{ind_t+fco}.tcon.name    = [t_con_names{co}];
+            all_t_con_names{ind_t}                                 = [t_con_names{co}];
+            template.spm.stats.con.consess{ind_t+fco}.tcon.convec  = (simple_con'*t_con(co,:)')'; % nicely takes the weights from the simple t cons into account
+            template.spm.stats.con.consess{ind_t+fco}.tcon.sessrep = 'none';
+            add_con_ind  = [add_con_ind ind_t+fco];
+            ind_t = ind_t + 1;
         end
     end
     
     if do_cons
         % get old con files to delete them *con* *spmT* *spmF* *ess*
         old_con_files = [''];
-        for cc = i:numel(con_templ)
+        for cc = 1:numel(con_templ)
             old_con_files = strvcat(old_con_files,spm_select('FPList',a_dir,con_templ{cc}));
         end
         matlabbatch{mbi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = cellstr(old_con_files);
@@ -674,7 +791,7 @@ for sub = 1:n_subs
     % prepare_warp
     template    = [];
     warp_files  = '';
-    if warp_con
+    if warp_a_con || warp_s_con        
         for co = 1:size(all_t_con_names,2)
             warp_files(co,:) = [a_dir filesep sprintf(con_temp,co+fco)]; % need to take f cons into account
         end
@@ -758,7 +875,7 @@ for g = 1:n_groups
     [groups{g},~,groups_ind{g}]  = intersect(analysis.all_subs(analysis.group_ind==g),all_sub_ids); % we need the indicies later
 end
 group_weights = analysis.group_weights;
-group_names   = analysis.group_names;
+group_ana_names   = analysis.group_ana_names;
 
 if analysis.use_vasa
     addon = ['V_'];
@@ -795,7 +912,7 @@ if do_one_t
             a_dir       = fullfile(path.firstlevelDir, name, anadirname);
             s_string    = sprintf('s%s',sm_str);
             if analysis.skernel == 0;s_string = '';end
-            if warp_con
+            if warp_a_con
                 swcon_file = fullfile(a_dir, sprintf(con_temp,pruned_add_con_ind(co)));
             end
             
@@ -894,7 +1011,7 @@ if do_fact || do_fact_con
                 a_dir       = fullfile(path.firstlevelDir, name, anadirname);
                 s_string    = sprintf('s%s',sm_str);
                 if analysis.skernel == 0;s_string = '';end
-                if warp_con
+                if warp_s_con
                     swcon_file = fullfile(a_dir, sprintf(con_temp,simple_con_ind{groups_ind{gr}(su)}(co)));
                 end
                 if warp_beta % if we have both beta takes precedence
@@ -964,9 +1081,9 @@ if do_fact_con
         matlabbatch{1}.spm.stats.con.consess{co}.fcon.convec = analysis.f_con{fc};
         co = co + 1; %increment
     end
-    for gw = 1:numel(group_names)
+    for gw = 1:numel(group_ana_names)
         for tc = 1:numel(t_con_names)
-            matlabbatch{1}.spm.stats.con.consess{co}.tcon.name    = [group_names{gw} '_' analysis.t_con_names{tc}]; % we need the original 
+            matlabbatch{1}.spm.stats.con.consess{co}.tcon.name    = [group_ana_names{gw} '_' analysis.t_con_names{tc}]; % we need the original 
             matlabbatch{1}.spm.stats.con.consess{co}.tcon.convec  = [kron(group_weights(gw,:),analysis.t_con(tc,:))]; % we need the original 
             matlabbatch{1}.spm.stats.con.consess{co}.tcon.sessrep = 'none';
             co = co + 1; %increment

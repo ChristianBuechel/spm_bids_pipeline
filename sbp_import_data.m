@@ -1,13 +1,13 @@
 function sbp_import_data(all_sub_ids)
 
-% Retrieve imgaes from DICOM erver using dicq and SFTP
+% Retrieve images from DICOM server using dicq and SFTP
 % it also DICOM converts them and makes 4D EPI
-% everythingis arranged according to light weight BIDS
+% everything is arranged according to light weight BIDS
 % who and what to import is specified in get_study_specs or in
-% participants.tsv
+% participants.tsv (preferred)
 
 if nargin<1
-    error('You now need to specify which subjects you want to import, e.g. import_data_ses([2 4 5])');
+    error('You need to specify which subjects you want to import, e.g. import_data_ses([2 4 5])');
 end
 [path,vars,~,import] = get_study_specs;
 if isfield(import,'scanner')
@@ -307,6 +307,7 @@ function [sess,excl] = parse_sessions(str)
 % sess = {[24170]}    {[24192]}    {[24170]}
 % excl = {[15 25]}    {0×0 cell}    {[3]}
 
+str = strtrim(str);
 err = strfind(str,' (');
 if ~isempty(err)
     error(sprintf('No space between PRISMA no and (exception): %s',str));

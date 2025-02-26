@@ -592,21 +592,21 @@ for i=1:nbchunks
     %======================================================================
     KWY          = spm_filter(xX.K,W*Y);
     
-    confounds    = xX.X(:,~isfinite(SPM.lss_ind(1,:)));
+    confounds    = xX.X(:,~isfinite(SPM.lss_ind(1,:))); % we put NaNs for confounds
        
     for l=1:nLss
         
         lss_mask = zeros(1,size(xX.X,2));
-        lss_mask(lss_cond) = 1; %all in
-        lss_mask(lss_cond(l)) = 0; %the one of interest out
-        [~,classes,~] = unique(SPM.lss_ind(2,isfinite(SPM.lss_ind(2,:)))); %gets us the # of different durations (Nans behave strange in unique ...)
-        [~,~,types] = unique(SPM.lss_ind(2,:)); % get different durations
-        types(types>max(classes)) = 0; 
-        collapse = [];
-            for t = 1:max(types)
-            collapse = [collapse (xX.X*(lss_mask'.*(types == t)))]; %make as mayn collapsed regressors as there are durations
+        lss_mask(lss_cond) = 1; % all in
+        lss_mask(lss_cond(l)) = 0; % the one of interest out
+        [classes,~,~] = unique(SPM.lss_ind(2,isfinite(SPM.lss_ind(2,:)))); %gets us the # of different durations (Nans behave strange in unique ...)
+        [~,~,types] = unique(SPM.lss_ind(2,:)); % get us all different indices some are funny due to NaN but we know how many there are (numel(classes))
+        types(types>numel(classes)) = 0; % zero those that are funny 
+        collapse = nan(size(xX.X,1),max(types));
+        for t = 1:max(types)
+            collapse(:,t) = (xX.X*(lss_mask'.*(types == t))); % make as many collapsed regressors as there are durations
         end
-        xXX_lss = [xX.X(:,l) collapse  confounds]; %assemble note, we are only interested in the first beta
+        xXX_lss = [xX.X(:,l) collapse  confounds]; % 1st column is regressor of interest then as many collapsed regressors as we have durations and then confounds
         
         %-Design space and projector matrix [pseudoinverse] for WLS
         %--------------------------------------------------------------------------

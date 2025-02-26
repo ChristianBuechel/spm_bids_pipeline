@@ -59,7 +59,7 @@ n_procs = n_subs; % to not block too many cores on the server
 if n_procs > vars.max_procs
     n_procs = vars.max_procs;
 end
-save('lin_coreg','matlabbatch')
+%save('lin_coreg','matlabbatch')
 if vars.parallel == 1
     run_spm_parallel(matlabbatch, n_procs);
     %run_spm_multiple(matlabbatch, n_procs);

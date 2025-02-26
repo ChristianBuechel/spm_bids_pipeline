@@ -36,7 +36,7 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.spatial.realign.estimate.eoptions.weight = fullfile(func_dir,'bins3rbrain_mask.nii');
 end
 
-save('realign_2_2_vdm','matlabbatch');
+%save('realign_2_2_vdm','matlabbatch');
 % run matlabbatch
 n_procs = n_subs; % to not block to many cores on the server
 

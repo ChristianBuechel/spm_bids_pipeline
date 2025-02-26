@@ -1,4 +1,4 @@
-function create_noise(all_sub_ids)
+function sbp_create_noise(all_sub_ids)
 % function create_noise
 % creates noise regressors for 1st ´level analysis
 % 1) WM and CSF
