@@ -84,9 +84,9 @@ end
 sm_str            = num2str(skernel(1));
 
 if ana == 3
-    do_lss            = analysis.lss;  % also do an LSS analysis ?
+    do_lss        = analysis.lss;  % also do an LSS analysis ?
 else
-    do_lss            = 0; % never for hrf and fir
+    do_lss        = 0; % never for hrf and fir
 end
 concatenate     = analysis.concatenate;
 
@@ -320,7 +320,7 @@ for sub = 1:n_subs
     % non-existing conds) takes p_mod into account
     i_reg = [];n_reg = [];
     for pp=1:numel(analysis.p_mod)
-        n_reg(pp) = 1+numel(analysis.p_mod{pp});
+        n_reg(pp) = n_base + n_base * numel(analysis.p_mod{pp});
         if any_cond_exist(pp)
             i_reg     = [i_reg repmat(1,1,n_reg(pp))];
         else
@@ -633,8 +633,8 @@ for sub = 1:n_subs
             end
         end
         mkdir(a_dir);
-        copyfile(which(mfilename),a_dir); % copy this file into analysis directory
-        copyfile(which('get_study_specs'),a_dir); % and copy this file as it contains everything necessary to repeat the analysis
+        copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak'))); % copy this file into analysis directory as *.bak
+        copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak'))); % and copy this file as it contains everything necessary to repeat the analysis
         for ts = 1:numel(tsvfiles)
             copyfile(tsvfiles{ts},a_dir); % and copy the respective *.tsv files that were used
         end
