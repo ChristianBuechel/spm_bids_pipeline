@@ -1,9 +1,9 @@
 function sbp_rsa_analyses(all_sub_ids)
 
-% analyse atlas based RSA data and write statistical maps for the
+% analyse atalas based RSA data and write statistical maps for the
 % comparison with each RDM as specified in rsa.models
 % uses non-parametric signed rank tests (like the RSA toolbox)
-% the images are stored as -logP (negative log of the p-value)
+% the images are stored as 
 
 % get all infos
 [path,vars,~,~,rsa] = get_study_specs;

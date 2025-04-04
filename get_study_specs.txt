@@ -109,6 +109,31 @@ qc.tThresh         = 1.7; %t-value threshold, only values above this threshold w
 qc.tMapSmoothK     = 4; %smoothing kernel for t-map
 qc.overlayColor    = [1 0 0]; %color for overlay (here red)
 
+%% rsa section
+% searchlight based RSA definitions
+rsa.searchopt      = struct();
+rsa.searchopt.def  = 'sphere';
+rsa.searchopt.spec = 8; % mm
+
+% atlas based RSA definitions
+rsa.atlas    = 'MNI_Asym_Schaefer2018_400Parcels_17Networks_order';
+rsa.roi_ind  = []; % take all
+rsa.valid    = 0.9; % only rois with > 90% coverage
+rsa.lss      = 1; % use lss betas yes/no
+rsa.mnn      = 0; % multivariate noise normalization yes/no; CAVE slow for searchlight
+rsa.mnn_lim  = 128; % zuse only n scans to calculate residuals
+rsa.ana_name = 'Conc_mov24_wm_csf_roi_lcpa_lsa_rdm_-2_none'; % where the betas come from
+
+% define which stims to use
+% these are RegExp and all beta images that fit the expression are averaged  
+rsa.stims = {'Fac_05','Fac_06','Fac_07','Fac_08','Hou_01','Hou_02','Hou_03','Hou_04','Mix_15','Mix_16','Mix_17','Mix_18','Mix_25','Mix_26','Mix_27','Mix_28','Mix_35','Mix_36','Mix_37','Mix_38','Mix_45','Mix_46','Mix_47','Mix_48'};
+
+% define candidate RDMs
+rsa.models{1}.RDM   = faces; %specify your RDM here
+rsa.models{1}.name  = 'faces';
+
+rsa.models{2}.RDM   = houses; %specify your RDM here
+rsa.models{2}.name  = 'houses';
 
 %% Analysis settings
 % the next section can be used to define different groups for 2nd level analysis
@@ -146,15 +171,17 @@ analysis.do_model          = 0; % specify the model
 analysis.do_est            = 0; % estimate the model
 analysis.do_vasa           = 0; % estimate vasa image for correction
 analysis.do_cons           = 0; % do contrasts
-analysis.do_correct_vasa   = 0; % correct beta/con images using vasa image
+analysis.do_correct_vasa    = 0; % correct beta/con images using vasa image
 analysis.do_warp           = 0; % warp native space con or beta images to template space
 analysis.do_smooth         = 1; % smooth these warped beta and con images
 
 % what to do at the second level
+analysis.fact_dept         = 0; % account for diff covariances at the 2nd level ANOVA
+analysis.fact_var          = 1; % ... or only variances
 analysis.do_fact           = 1; % simple anova that reproduces the 1st level anlysis at the 2nd level
 analysis.do_fact_con       = 1; % do all contrasts at the second level
 
-analysis.do_one_t          = 0; % instead use the estimated cons from 1st level and do one sample t tests
+analysis.do_one_t         = 0; % instead use the estimated cons from 1st level and do one sample t tests
 
 % what to do
 do_hrf_param  = 0;

@@ -1,9 +1,12 @@
 function sbp_rsa_get_rois(all_sub_ids)
 
-% We define which betas should be averaged in RSA by using
-% "F-contrasts". We  then simply multiply the beta matrix with this F-contrast
-% to average across some conditions. Careful : lss_betas are a subset of all
-% betas! We have also adopted the regexp idea of TDT 
+% Extract data from atlas rois
+% everything is defined in get_study_specs
+% currentyl all ROIs are used but at a certain stage rsa.roi_ind can be
+% defined to specify a subset
+% the data will be saved as *.mat files in the respective first level
+% directory 
+% to analyze these data use sbp_rsa_analyses.m
 
 
 % get all infos

@@ -46,6 +46,8 @@ function sbp_analyses(all_sub_ids)
 % analysis.hpf               : High pass filter in s
 % analysis.do_fact           : perform 2nd level anova w/o subject constants
 % analysis.do_fact_con       : estimate t-contrasts for group 
+% analysis.fact_dept         : non-sphericity 2nd level ANOVA (cov)
+% analysis.fact_var          : non-sphericity 2nd level ANOVA (var)
 %
 % analysis.do_one_t          : perform one sample t-tests for all t-contrasts
 %
@@ -990,8 +992,8 @@ if do_fact || do_fact_con
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).gmsca = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).ancova = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).name = 'CONDITION';
-    matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).dept = 1;
-    matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).variance = 1;
+    matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).dept = analysis.fact_dept;
+    matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).variance = analysis.fact_var;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).gmsca = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).ancova = 0;
     if ana == 1  % FIR
