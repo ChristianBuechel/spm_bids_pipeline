@@ -973,9 +973,14 @@ if do_one_t
         mbi = mbi + 1;
         
 
-        copyfile(which(mfilename),fullfile(out_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak'))); % copy this file into analysis directory as *.bak
-        copyfile(which('get_study_specs'),fullfile(out_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak'))); % and copy this file as it contains everything necessary to repeat the analysis
+        copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak'))); % copy this file into analysis directory as *.bak
+        copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak'))); % and copy this file as it contains everything necessary to repeat the analysis
 
+
+
+
+        copyfile(which(mfilename),out_dir);
+        copyfile(which('get_study_specs'),out_dir);
         run_local(matlabbatch);
     end
 end
@@ -1002,11 +1007,11 @@ if do_fact || do_fact_con
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).variance = analysis.fact_var;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).gmsca = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).ancova = 0;
-    % if ana == 1  % FIR
-    %     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).variance = 0;
-    %     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).dept = 0; %too many ...
-    %     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).variance = 1;
-    % end
+    if ana == 1  % FIR
+        matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).variance = 0;
+        matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).dept = 0; %too many ...
+        matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).variance = 1;
+    end
     
     %GROUP SUBJECT DAY CONDITION
     allfiles  = [];
@@ -1065,10 +1070,8 @@ end
 
 if do_fact
     mkdir(out_dir);
-
-    copyfile(which(mfilename),fullfile(out_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak'))); % copy this file into analysis directory as *.bak
-    copyfile(which('get_study_specs'),fullfile(out_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak'))); % and copy this file as it contains everything necessary to repeat the analysis
-
+    copyfile(which(mfilename),out_dir);
+    copyfile(which('get_study_specs'),out_dir);
     run_local(matlabbatch);
 end
 
