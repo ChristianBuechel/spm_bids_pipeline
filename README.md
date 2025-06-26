@@ -1,4 +1,4 @@
-SPM based data import, preprocessing and analyses for data in BIDS format  
+SPM based data import, preprocessing and analyses for data in BIDS format.  
 Includes a function to download the data from the ISN DICOM data base to the project directory  
 
 THIS IS A MAJOR REVISION, it is very likely that you have adapt your scripts if you have used a previous version
@@ -38,7 +38,7 @@ See full_diagn_qc.txt for how to call these functions.
 1) The new version of the toolbox now also incorporates correction with fieldmaps using VDM files.
 
 2) The new version uses an extension to participants.tsv using a column labeled 'scan_id' (the old import still works)
-These contain the individual PRISMA numbers. If there are more sessions seperate the PRISMA numbers by spaces NOT tabs !
+These contain the individual PRISMA numbers. If there are more sessions, seperate the PRISMA numbers by spaces NOT tabs !
 In addition you can specify series that should NOT be imported by adding them in () with NO space in between e.g.
 
 participant_id	sex	age	scan_id
