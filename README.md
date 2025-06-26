@@ -28,7 +28,7 @@ Copy it to "scripts" edit it and rename it to "get_study_specs.m"
 Then you should create a wrapper file such as "do_em_all.m" that will sequentially call the subfunctions in the repository  
 There is a commented example in the repo (with ext .txt)
 
-The new version of the toolbox niot only uses a nonlineatr coregistration as in CAT12, but now also incorporates correction with fieldmaps using VDM files. 
+The new version of the toolbox not only uses a nonlinear coregistration as in CAT12, but now also incorporates correction with fieldmaps using VDM files. 
 Both workflows are described in **do_em_all.txt**
 
 This toolbox now also includes quality control routines found in \qc by Alexandra Tinnermann
