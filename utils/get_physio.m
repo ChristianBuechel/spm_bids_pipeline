@@ -1,8 +1,4 @@
-function [desmtx,breaths,beats] = get_physio(tsv,samp_int,debug)
-
-if nargin < 3
-    debug = 0;
-end
+function [desmtx,beats,breaths] = get_physio(tsv,samp_int)
 
 %% get data
 puls = tsv(:,1);
@@ -31,11 +27,11 @@ fprintf('Found %d pulses estimated TR of %1.2f s\n',length(scanner),med.*samp_in
 
 %% now breathing
 resp      = -(resp - spm_conv(resp,10./samp_int));%change sign and remove baseline drifts
-p         = peak_LMS(resp,100,debug);
+p         = peak_LMS(resp,100);
 d_p       = diff(p);
 med       = median(d_p);  % robust against outliers
 fprintf('Found %d breaths estimated breathing interval of %1.2f s or %1.0f bpm\n',size(p,2),med.*samp_int,60./(med.*samp_int));
-breaths = size(p,2);
+breaths   = size(p,2);
 
 %% everything else is done kernel based
 n_resp    = (resp-min(resp))*max(resp)./(max(resp)-min(resp));
@@ -55,7 +51,7 @@ resp_s    = resp_p(scanner);
 desmtx    = [desmtx fourier_expand(resp_s, order_r)];
 
 %% now pulse
-p         = peak_LMS(puls,500,debug);
+p         = peak_LMS(puls,500);
 d_p       = diff(p);
 med       = median(d_p);  % robust against outliers
 fprintf('Found %d heartbeats estimated R-R interval of %1.2f s or %1.0f bpm\n',size(p,2),med.*samp_int,60./(med.*samp_int));

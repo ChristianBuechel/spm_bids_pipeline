@@ -102,16 +102,38 @@ do_correct_vasa = analysis.do_correct_vasa;
 do_warp         = analysis.do_warp;
 do_smooth       = analysis.do_smooth;
 
+% TODO change ppi flag logic
+if isfield(analysis,'ppi')
+    do_ppi          = analysis.do_ppi; 
+    if do_ppi
+        ppi_specs = analysis.ppi;
+    
+        if parallel && ppi_specs.skernel > 0
+            warning(['You are about to apply smoothing to the ppi seed time series in parallel mode.' ...
+                'This operation requires a significant amount of RAM and may cause your system to crash. Proceed with caution.'])
+        end
+    end
+else
+    do_ppi          = false;
+end
+
 % second level
 do_fact         = analysis.do_fact;
 do_fact_con     = analysis.do_fact_con;
 
 do_one_t        = analysis.do_one_t;
 
+
 if isfield(analysis,'sess')
     sess_2_ana = analysis.sess;
 else
     sess_2_ana = 1:vars.nSess;
+end
+
+if isfield(analysis,'wRuns')
+    ana_runs = analysis.wRuns;
+else
+    ana_runs = 1:vars.nRuns;
 end
 
 if ~isfield(analysis,'group_ind')
@@ -196,7 +218,7 @@ for sub = 1:n_subs
     % harvest epifiles and tsvfiles and honor exclusions
     for i_ses = 1:numel(sess_2_ana)
     ses = sess_2_ana(i_ses);
-        for run = 1:vars.nRuns
+        for run = ana_runs
             if (~isfield(analysis,'exclude')) || (not_excluded(analysis.exclude,sub_id,ses,run))
                 cnt = cnt + 1;
                 epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
@@ -271,9 +293,21 @@ for sub = 1:n_subs
     end
     
     template_wls.spm.tools.rwls.fmri_rwls_spec.bases = template.spm.stats.fmri_spec.bases;
-    
-    a_dir    = fullfile(path.firstlevelDir,sprintf('sub-%02d',sub_id),anadirname);
-    
+
+
+    % directory handling
+    if do_ppi
+        % we use a temporary directory for the PPI analysis to specify and estimate the normal glm
+        temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('%s_tmp', anadirname));
+        a_dir    = temp_dir;
+
+        % Store final PPI directory path
+        ppi_dir  = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('PPI_%s_%s', ppi_specs.str, anadirname));
+    else
+        a_dir    = fullfile(path.firstlevelDir,sprintf('sub-%02d',sub_id),anadirname);
+    end
+
+
     lss_ind  = [];
     cond_use = [];
     z        = [];
@@ -318,7 +352,7 @@ for sub = 1:n_subs
     end
     
     % fix things for non-existing conditions
-    any_cond_exist = any(cond_exist); % binary mask for conds we don't have at all
+    any_cond_exist = any(cond_exist,1); % binary mask for conds we don't have at all
     for ww = find(~any_cond_exist)
         warning(sprintf('Sub # %d misses : %s ',sub_id,char(analysis.cond_names(ww))));
     end
@@ -337,17 +371,22 @@ for sub = 1:n_subs
 
     p_mod           = analysis.p_mod(any_cond_exist); % prune pmods
 
-    if ~isempty(analysis.t_con)
-        if any(~i_reg)
-            preserve   = find(~any(analysis.t_con(:,~i_reg),2)); % keep only those cons where we do not have weights in missing conds (incl param mods)
+    if ~do_ppi % TODO: implement handling of missing conds for ppi
+        if ~isempty(analysis.t_con)
+            if any(~i_reg)
+                preserve   = find(~any(analysis.t_con(:,~i_reg),2)); % keep only those cons where we do not have weights in missing conds (incl param mods)
+            else
+                preserve   = 1:size(analysis.t_con,1);
+            end
+            t_con      = analysis.t_con(preserve,find(i_reg)); % prune t_con
+            t_con_names= analysis.t_con_names(preserve); % ... and their names
         else
-            preserve   = 1:size(analysis.t_con,1);
+            t_con      = []; 
+            t_con_names= []; 
         end
-        t_con      = analysis.t_con(preserve,find(i_reg)); % prune t_con
-        t_con_names= analysis.t_con_names(preserve); % ... and their names
     else
-        t_con      = []; 
-        t_con_names= []; 
+        t_con       = analysis.t_con;
+        t_con_names = analysis.t_con_names;
     end
     
     cond_names = analysis.cond_names(any_cond_exist); % and prune conditions
@@ -394,11 +433,11 @@ for sub = 1:n_subs
         % other nuisance variables
         
         if strfind(noise_corr,'physio')
-            physio_noise_f = char(spm_file(epifiles{run},'prefix','physio_','ext','.mat'));
+            physio_noise_f = char(spm_file(epifiles{run},'prefix','physio_','ext','.txt'));
             if exist(physio_noise_f,'file')
                 physio_noise = load(physio_noise_f);
                 physio_noise  = physio_noise(scan_range{run}(1):scan_range{run}(2),:); %cut
-                all_nuis{run} = [all_nuis{run} normit(physio_noise.physio)];
+                all_nuis{run} = [all_nuis{run} normit(physio_noise)];
             end
         end
         
@@ -662,7 +701,7 @@ for sub = 1:n_subs
             mbi = mbi + 1;
         end
     end
-    
+
     if do_est
         if wls
             matlabbatch{mbi,sub}.spm.tools.rwls.fmri_rwls_est.spmmat = {fullfile(a_dir,'SPM.mat')};
@@ -673,7 +712,8 @@ for sub = 1:n_subs
         end
         mbi = mbi + 1;
     end
-    
+
+
     if do_lss
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = lss_ind;
@@ -688,10 +728,69 @@ for sub = 1:n_subs
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'cb_vasa';
         mbi = mbi + 1;
     end
+
+
+    %% PPI
+
+    if do_ppi && ~(do_fact || do_fact_con || do_one_t) %we only do this on the first level
+
+
+        % first create f contrast for normal glm, we need this to clean the ppi regressors
+        % (do_ppi set to false so that contrast is not created for ppi)
+        n_ppi_conds      = numel(analysis.ppi.conds); 
+        [glm_f_vec, ~]   = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, false, n_ppi_conds, p_mod, ana);
+
+        % TODO: here we can also have users define t-contrasts (based on
+        % the original analysis) that can be used to find activtation centers
+
+        matlabbatch{mbi, sub}.spm.stats.con.spmmat = {fullfile(a_dir,'SPM.mat')};
+        matlabbatch{mbi, sub}.spm.stats.con.delete = 1;
+        matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.name  = 'eff_of_int';
+        matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.convec = {glm_f_vec};
+        mbi = mbi + 1;
+        
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string    = fullfile(a_dir,'SPM.mat');
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = n_cond; % we need the original number of conditions here
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{3}.evaluated = ppi_specs;
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{4}.string    = char(fullfile(mean_dir,'y_epi_2_template.nii')); %TODO: use BIDS instead of function input
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{5}.string    = char(spm_file(m_epi,'prefix','wmeana'));
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'sbp_ppi';
+        mbi = mbi + 1;
+
+    end
     
     
     %% now prepare contrasts
     template = [];
+    
+    % ppi specific overwrites
+    if do_ppi
+        a_dir           = ppi_dir;
+
+        % set up ppi regressors  
+        n_ppi_conds      = numel(analysis.ppi.conds);
+        n_ppi_regressors = n_ppi_conds*2 + 1; % 1 psy + 1 ppi regressor for every condition + seed time series (= n_ppi_conds*2+1)
+        conds_done{sub}  = 1:n_ppi_regressors; %TODO: account for missing conds
+        n_cond = n_ppi_regressors;
+
+        % Get the actual condition names for PPI regressors
+        ppi_cond_names = analysis.cond_names(ppi_specs.conds);
+
+        % Create regressor names
+        cond_names = [
+            strcat('PSY_', ppi_cond_names), ...  % Psychological regressors
+            {sprintf('Y_%s', analysis.ppi.name)}, ... % Seed time series 
+            strcat('PPI_', ppi_cond_names)  % PPI interaction regressors
+        ];
+
+    else
+        a_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), anadirname);
+
+    end 
+    
+
+    % create f-contrast
     template.spm.stats.con.spmmat = {fullfile(a_dir,'SPM.mat')};
     template.spm.stats.con.delete = 1;
     fco = 1; % counter for f-contrasts
@@ -700,37 +799,28 @@ for sub = 1:n_subs
     if (ana == 3) & (concatenate == 1)
         cond_use{1} = 1:numel(new_t.spm.stats.fmri_spec.sess(1).cond);
     end
+    
+    [f_vec, n_reg] = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, do_ppi, 0, p_mod, ana);
+    template.spm.stats.con.consess{fco}.fcon.convec = {f_vec};
+
     % construct the effects of int contrast across runs (complicated because some conds might be missing in some runs)
     % get some helpful vectors first
-    i_reg = [];n_reg = [];
-    for pp=1:numel(p_mod)
-        n_reg(pp) = 1+numel(p_mod{pp});
-        i_reg     = [i_reg repmat(pp,1,n_reg(pp))];
-    end
+    % i_reg = [];n_reg = [];
+    % for pp=1:numel(p_mod)
+    %     n_reg(pp) = 1+numel(p_mod{pp});
+    %     i_reg     = [i_reg repmat(pp,1,n_reg(pp))];
+    % end
     
-    if ana == 3 % f-con for LSA needs adjustment
-        max_cond = 0;
-        for run = 1:n_run
-            max_cond = max(max_cond, max(cond_use{run}));
-        end
-        i_reg = 1:max_cond;
-        n_reg = ones(size(i_reg));
-    end
+    % if ana == 3 % f-con for LSA needs adjustment
+    %     max_cond = 0;
+    %     for run = 1:n_run
+    %         max_cond = max(max_cond, max(cond_use{run}));
+    %     end
+    %     i_reg = 1:max_cond;
+    %     n_reg = ones(size(i_reg));
+    % end
     
-    
-    f_vec = [];
-    for run = 1:n_run
-        cvec{run} = zeros(sum(n_reg));
-        for co = 1:numel(cond_use{run})
-            cvec{run} = cvec{run} + diag(i_reg==cond_use{run}(co)); %add in the eye(s)
-        end
-        cvec{run} = kron(cvec{run},eye(n_base)); % expand basis functions
-        cvec{run}(:,find(~sum(cvec{run})))=[]; % remove conds that do not exist in this run
-        f_vec = [f_vec cvec{run} zeros(size(cvec{run},1),n_nuis)]; % add zeros for nuisance vars
-    end
-    f_vec = [f_vec zeros(size(cvec{run},1),n_o_run)]; % add zeros for run constants
-    template.spm.stats.con.consess{fco}.fcon.convec = {f_vec}; % complete eoi contrast matrix
-    
+
     % now do the simple cons for 2nd level anova
     % simply go through the eoi (f_vec) li-+ne by line and correct by # of occurrence
     ind_t = 1;ind_b = 1;
@@ -738,6 +828,7 @@ for sub = 1:n_subs
     simple_con_ind{sub} = [];simple_beta_ind{sub} = [];
     all_t_con_names = [];
     simple_con = zeros(n_cond*n_base,size(f_vec,2));
+
     for co = 1:n_cond
         for pm = 1:n_reg(co)
             if pm == 1
@@ -827,7 +918,11 @@ for sub = 1:n_subs
             mbi = mbi + 1;
         end
     end
+
     
+
+    %% Warping and smoothing
+
     if do_warp
         % using nlin coreg + DARTEL or vdm corrected EPIs
         matlabbatch{mbi,sub}.spm.util.defs.comp{1}.def = fullfile(mean_dir,'y_epi_2_template.nii');
@@ -854,11 +949,13 @@ for sub = 1:n_subs
         matlabbatch{mbi,sub}.spm.spatial.smooth.prefix = ['s' sm_str];
         mbi = mbi + 1;
     end
+
     
 end
 
 if ~isempty(matlabbatch)
     % run matlabbatch
+
     n_procs = n_subs; % to not block to many cores on the server
     
     if n_procs > vars.max_procs
@@ -872,9 +969,14 @@ if ~isempty(matlabbatch)
     end
 end
 
+
 %% second level analyses
 % would be interesting to know what we really need from the above
 % and whether we can modularize it
+
+if do_ppi
+    anadirname = sprintf('PPI_%s_%s', ppi_specs.str, anadirname);
+end
 
 n_groups     = max(analysis.group_ind);
 for g = 1:n_groups
@@ -1086,13 +1188,21 @@ if do_fact_con
     co = co + 1; %increment
     
     %do F-contrasts
-    for fc=1:numel(f_con_names)
-        matlabbatch{1}.spm.stats.con.consess{co}.fcon.name   = analysis.f_con_names{fc}; % we need the original 
-        matlabbatch{1}.spm.stats.con.consess{co}.fcon.convec = analysis.f_con{fc};
-        co = co + 1; %increment
+    if ~do_ppi % hott fix bc we f contrasts are not yet implemented for ppi
+        for fc=1:numel(f_con_names)
+            matlabbatch{1}.spm.stats.con.consess{co}.fcon.name   = analysis.f_con_names{fc}; % we need the original 
+            matlabbatch{1}.spm.stats.con.consess{co}.fcon.convec = analysis.f_con{fc};
+            co = co + 1; %increment
+        end
     end
+
+    if do_ppi % hot fix for ppi bc for t-constrast definition below original contrasts are used. However, these are not the correct contrasts for the ppi
+        analysis.t_con_names = t_con_names;
+        analysis.t_con       = t_con;
+    end
+
     for gw = 1:numel(group_ana_names)
-        for tc = 1:numel(t_con_names)
+        for tc = 1:numel(analysis.t_con_names)
             matlabbatch{1}.spm.stats.con.consess{co}.tcon.name    = [group_ana_names{gw} '_' analysis.t_con_names{tc}]; % we need the original 
             matlabbatch{1}.spm.stats.con.consess{co}.tcon.convec  = [kron(group_weights(gw,:),analysis.t_con(tc,:))]; % we need the original 
             matlabbatch{1}.spm.stats.con.consess{co}.tcon.sessrep = 'none';
@@ -1103,6 +1213,7 @@ if do_fact_con
     run_local(matlabbatch);
 end
 
+end
 
 function run_local(matlabbatch)
 
@@ -1112,12 +1223,13 @@ end
 spm_jobman('initcfg');
 spm('defaults', 'FMRI');
 spm_jobman('run',matlabbatch);
+end
 
 function Y = normit(X)
 %normalise X to zero mean, std unity
 Y = X - ones(size(X,1),1)*mean(X); %zero mean
 Y = Y ./ (ones(size(Y,1),1)*std(Y)); %std 1
-
+end
 
 function out = not_excluded(ana_ex,sub_id,ses,run)
 % check whether this run should be in the analysis
@@ -1133,4 +1245,49 @@ for i_ae = 1:numel(ana_ex)
             end
         end
     end
+end
+end
+
+
+function [f_vec, n_reg] = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, is_ppi, n_ppi_conds, p_mod, ana)
+    
+    % construct the effects of int contrast across runs (complicated because some conds might be missing in some runs)
+    % get some helpful vectors first
+    i_reg = [];n_reg = [];
+    for pp=1:numel(p_mod)
+        n_reg(pp) = 1+numel(p_mod{pp});
+        i_reg     = [i_reg repmat(pp,1,n_reg(pp))];
+    end
+    
+    % Adjust for LSA if needed
+    if ana == 3 % f-con for LSA needs adjustment
+        max_cond = 0;
+        for run = 1:n_run
+            max_cond = max(max_cond, max(cond_use{run}));
+        end
+        i_reg = 1:max_cond;
+        n_reg = ones(size(i_reg));
+    end
+    
+    % actual contrast creation
+    if ~is_ppi
+
+        % Standard GLM F-contrast
+        f_vec = [];
+        for run = 1:n_run
+            cvec{run} = zeros(sum(n_reg));
+            for co = 1:numel(cond_use{run})
+                cvec{run} = cvec{run} + diag(i_reg==cond_use{run}(co));
+            end
+            cvec{run} = kron(cvec{run}, eye(n_base));
+            cvec{run}(:,find(~sum(cvec{run}))) = [];
+            f_vec = [f_vec cvec{run} zeros(size(cvec{run},1), n_nuis)];
+        end
+        f_vec = [f_vec zeros(size(cvec{run},1), n_o_run)];
+    else
+        % PPI F-contrast
+        n_ppi_regressors = n_ppi_conds*2 + 1;
+        f_vec = [eye(n_ppi_regressors) zeros(n_ppi_regressors, n_nuis+n_o_run)];
+    end
+
 end

@@ -1,148 +1,154 @@
-function clean_physio(all_sub_ids)
-% clean_physio(all_sub_ids)
-% residualize images with respect to physio/CSF noise
-% to make realignment less prone to intesity artefacts
+function clean_physio(subIDs)
 
-[path,vars]  = get_study_specs;
-BIDS         = spm_BIDS(path.preprocDir);
-n_subs       = length(all_sub_ids);
+[path,vars,~,import]    = get_study_specs;
+nSubs                   = length(subIDs);
+BIDS                    = spm_BIDS(path.preprocDir);
+physioDir               = fullfile(path.baseDir,'physio');
+matDir                  = fullfile(physioDir,'mat');
+nSess                   = vars.nSess;
+nRuns                   = vars.nRuns;
+taskName                = vars.task;
+nDummies                = import.dummies;
+TR                      = vars.sliceTiming.tr;
+incomplRuns             = str2double(extract(import.data(1).cond,digitsPattern)); %rule for number of scans provided in get_study_specs for data import to find incomplete runs
 
-for sub = 1:n_subs
-    sub_id     = all_sub_ids(sub);
-    gi         = 1;
-    epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    func_dir           =  spm_file(epi,'path');
-    mkdir(char(fullfile(func_dir,'res')));
-    for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            rename_mat = 0;
-            if exist(char(spm_file(epi,'prefix','a','ext','.mat')),'file') %assume original realign
-                rename_mat = 1;
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(epi,'prefix','a','ext','.mat');
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.pattern = 'asub';
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.repl = 'brain_asub';
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.unique = false;
-                gi = gi + 1;
-            end
-            
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.dir_ops.cfg_mkdir.parent = func_dir;
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.dir_ops.cfg_mkdir.name = 'tmp';
-            gi = gi + 1;
-                     
-            run_niftis         =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^a'),Inf);
-            all_nuis           = [];
+for sub = 1:nSubs
+    for ses = 1:nSess
+        fileName = fullfile(matDir,sprintf('sub-%02d/ses-%02d',subIDs(sub),ses),sprintf('sub-%02d_ses-%02d_physio.mat',subIDs(sub),ses));
 
-            physio_noise_f     =  char(spm_file(epi,'prefix','physio_','ext','.mat'));
-            if exist(physio_noise_f,'file')
-                physio_noise       =  load(physio_noise_f);
-                all_nuis           =  [all_nuis physio_noise.physio];
+        %% First, load the mat file
+        try
+            data = load(fileName);
+            do_preproc = 1;
+            fprintf('\n\nRunning physio preprocessing for sub%02d session %d... \n',subIDs(sub),ses);
+        catch
+            fprintf(['No mat file found for ',sprintf('sub%02d session %d. skipping...\n',subIDs(sub),ses)]);
+            do_preproc = 0;
+        end
+
+        if do_preproc
+
+            % find which channel is for what
+            phy = get_correct_channels(data);
+
+            % Determine sample rate and tolerance
+            sampInt  = phy.cardiac.interval;
+            tol      = 0.005;          % 5 ms tolerance
+
+            %data will be downsampled to 100 Hz
+            sampIntNew = 1/100;
+
+            %downsample data
+            puls  = interp1(phy.cardiac.values,1:sampIntNew/sampInt:size(phy.cardiac.values,1))';
+            resp  = interp1(phy.resp.values,1:sampIntNew/sampInt:size(phy.resp.values,1))';
+
+            %trigger times are still in s!
+            scan = phy.trigger.times;
+
+            %find breaks in between runs
+            [ind,runPulses] = get_runs(scan);
+
+            %remove aborted runs that have fewer than number of scans
+            %reported in get_study_specs for dicom import
+            abortRuns = find_aborted_runs(ind,runPulses,incomplRuns);
+            scan(abortRuns) = [];
+
+            %% check for excess- or missing pulses based on trigger diffs
+            pulse  = diff(scan);
+            fprintf('\nChecking for excess or missing pulses ...\n')
+            % Excess pulses
+            while any(pulse<TR-tol)
+                fprintf('Sub%02d: excess pulses found\n',subIDs(sub));
+                wh          = find(pulse<TR-tol,1);
+                scan(wh+1)  = [];
+                fprintf('removing pulse %d\n',wh+1);
+                pulse       = diff(scan);
             end
-            bs_csf_noise_f     =  char(spm_file(epi,'prefix','noise_bs_csf_a','ext','.mat'));
-            if exist(bs_csf_noise_f,'file')
-                bs_csf_noise       =  load(bs_csf_noise_f);
-                all_nuis           =  [all_nuis bs_csf_noise.segment.data];
+
+            % Missing pulses
+            while any(discretize(pulse, [(2*TR)-tol, (2*TR)+tol]))
+                fprintf('Sub%02d: missing pulses found\n',subIDs(sub));
+                wh     = find((pulse >= (2*TR)-tol) & (pulse <= (2*TR)+tol),1);
+                scan   = [scan(1:wh);scan(wh+1)+TR;scan(wh+1:end)];
+                fprintf('adding pulse %d\n',wh+1);
+                pulse  = diff(scan);
             end
-            
-            n_nuis             =  size(all_nuis,2);
-            %do firstlevel with physio regressors only
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.sess.scans = cellstr(run_niftis);
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.dir = fullfile(func_dir,'tmp');
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.timing.units = 'scans';
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.timing.RT = vars.sliceTiming.tr;
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.timing.fmri_t = 16;
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.timing.fmri_t0 = 8;
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.sess.cond = struct('name', {}, 'onset', {}, 'duration', {}, 'tmod', {}, 'pmod', {}, 'orth', {});
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.sess.multi = {''};
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.sess.regress = struct('name', {}, 'val', {});
-            
-            for nuis = 1:n_nuis
-                matlabbatch{gi,sub}.spm.stats.fmri_spec.sess.regress(nuis) = struct('name', cellstr(num2str(nuis)), 'val', all_nuis(:,nuis));
+
+            %% Check each run for number of correct pulses
+            for run = 1:nRuns
+                epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',taskName,'type','bold');
+                nScans = numel(spm_vol(epi{:,1}));
+
+                [ind,runPulses] = get_runs(scan);
+                indRun   = ind(run);
+                nPulses  = runPulses(run);
+
+                %remove dummy pulses
+                if nDummies > 0
+                    scan(indRun+1:indRun+nDummies) = [];
+                    [ind,runPulses] = get_runs(scan);
+                    indRun   = ind(run);
+                    nPulses  = runPulses(run);
+                end
+
+                %identify runs that have wrong number of pulses
+                %check for missing pulses in the end
+                if nPulses < nScans
+                    if nPulses == nScans - 1
+                        fprintf('Sub%02d run%d: adding missing pulse in the end\n',subIDs(sub),run);
+                    else
+                        fprintf('Sub%02d run%d: more than one missing pulse in the end detected.\nAll missing pulses will be added but make sure to understand why there are several missing pulses!!\n',subIDs(sub),run);
+                    end
+                    scan  = [scan(indRun+1:indRun+nPulses); scan(indRun+nPulses)+TR; scan(indRun+nScans:end)];
+                end
+
+                %check for too many pulses in the end
+                if nPulses > nScans
+                    if nPulses == nScans + 1
+                        fprintf('Sub%02d run%d: removing excess pulse in the end\n',subIDs(sub),run);
+                    else
+                        fprintf('Sub%02d run%d: more than one excess pulse in the end detected.\nThey will be deleted but make sure to understand why there are several excess pulses!\n',subIDs(sub),run);
+                    end
+                    scan(indRun+(nScans+1:nPulses)) = [];
+                end
+
+                %check if number of pulses and diff are (now) correct
+                [ind, runPulses] = get_runs(scan);
+
+                err1 = 0; err2 = 0;
+                if runPulses(run) ~= nScans
+                    fprintf('Number of pulses not correct in sub%02d run%d\n',subIDs(sub),run);
+                    err1 = 1;
+                end
+                scanRun = scan(ind(run)+1:ind(run)+nScans);
+                pulse   = diff(scanRun);
+                if any(pulse < TR-tol) || any(pulse > TR+tol)
+                    fprintf('Timing of pulses in sub%02d run%d is not correct\n',subIDs(sub),run);
+                    err2 = 1;
+                end
+                if err1 == 0 && err2 == 0
+                    fprintf('Sub%02d run%d ok\n',subIDs(sub),run);
+                end
+
+                %convert trigger times into 100 Hz and find run indeces
+                scanRun = scanRun/sampIntNew;
+                index = [ceil(scanRun(1)) floor(scanRun(end)+TR/sampIntNew)]; %1 more sample
+
+                % convert trigger events into time series with same length as cardiac, resp etc
+                % for bids requirements
+                triggerTS = zeros((index(2)-index(1))+1,1);
+                triggerTS(round(scanRun-scanRun(1))+1) = 1;
+
+                %crop trigger, cardiac, and respiratory data
+                crop.trigger      = triggerTS;
+                crop.cardiac      = puls(index(1):index(2),:);
+                crop.resp         = resp(index(1):index(2),:);
+
+                %now save bids compatible tsv file with physio data
+                saveName = fullfile(path.preprocDir,sprintf('sub-%02d',subIDs(sub)),sprintf('ses-%02d',ses),'func',sprintf('sub-%02d_ses-%02d_task-%s_run-%02d',subIDs(sub),ses,taskName,run));
+                save_tsv_file(saveName,crop,sampIntNew);
+                clear crop triggerTS
             end
-            
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.sess.multi_reg = {''};
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.sess.hpf = Inf; %no highpass filter
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.fact = struct('name', {}, 'levels', {});
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.bases.hrf.derivs = [0 0];
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.volt = 1;
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.global = 'None';
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.mthresh = -Inf;
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.mask = {''};
-            matlabbatch{gi,sub}.spm.stats.fmri_spec.cvi = 'none';
-            gi = gi + 1;
-            
-            matlabbatch{gi,sub}.spm.stats.fmri_est.spmmat = fullfile(fullfile(func_dir,'tmp'),'SPM.mat');
-            matlabbatch{gi,sub}.spm.stats.fmri_est.write_residuals = 0;
-            matlabbatch{gi,sub}.spm.stats.fmri_est.method.Classical = 1;
-            gi = gi + 1;
-            
-            matlabbatch{gi,sub}.spm.stats.con.spmmat = fullfile(fullfile(func_dir,'tmp'),'SPM.mat');
-            matlabbatch{gi,sub}.spm.stats.con.consess{1}.fcon.name = 'mean';%the one we need to residualize with
-            matlabbatch{gi,sub}.spm.stats.con.consess{1}.fcon.weights = [zeros(1,n_nuis) 1];
-            matlabbatch{gi,sub}.spm.stats.con.consess{1}.fcon.sessrep = 'none';
-            
-            matlabbatch{gi,sub}.spm.stats.con.consess{2}.fcon.name = 'nuis'; %F-map is good to see whether physio/CSF is correct
-            matlabbatch{gi,sub}.spm.stats.con.consess{2}.fcon.weights = [eye(n_nuis) zeros(n_nuis,1)];
-            matlabbatch{gi,sub}.spm.stats.con.consess{2}.fcon.sessrep = 'none';
-            
-            matlabbatch{gi,sub}.spm.stats.con.delete = 1;
-            gi = gi + 1;
-            
-            matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string    = char(fullfile(fullfile(func_dir,'tmp'),'SPM.mat'));
-            matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = 1; % the first contrast i.e. mean stays in
-            matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
-            matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'spm_write_residuals';
-            gi = gi + 1;
-            
-            all_res = [];
-            for r=1:size(run_niftis,1)
-                all_res{r,1} = char(fullfile(func_dir,'tmp',sprintf('Res_%4.4d.nii',r)));
-            end
-            matlabbatch{gi,sub}.spm.util.cat.vols = all_res;
-            matlabbatch{gi,sub}.spm.util.cat.name = char(spm_file(spm_file(epi,'filename'),'prefix','res_'));
-            matlabbatch{gi,sub}.spm.util.cat.dtype = 4; %int16, SAME is 0
-            matlabbatch{gi,sub}.spm.util.cat.RT = vars.sliceTiming.tr;
-            gi = gi + 1;
-            
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = fullfile(func_dir,'tmp',spm_file(spm_file(epi,'filename'),'prefix','res_'));
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveto = fullfile(func_dir,'res');
-            gi = gi + 1;
-            
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = fullfile(fullfile(func_dir,'tmp'),'spmF_0002.nii') ;
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = fullfile(func_dir,'res');
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.pattern = 'spmF_0002';
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.repl = char(spm_file(spm_file(epi,'basename'),'prefix','Physio_'));
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.unique = false;
-            gi = gi + 1;
-            
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.dir_ops.dir_move.dir = fullfile(func_dir,'tmp');%delete tmp dir
-            matlabbatch{gi,sub}.cfg_basicio.file_dir.dir_ops.dir_move.action.delete = true;
-            gi = gi + 1;
-            
-            if rename_mat == 1 %assume original realign
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(epi,'prefix','brain_a','ext','.mat');
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.pattern = 'brain_asub';
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.repl = 'asub';
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.unique = false;
-                gi = gi + 1;
-            end                     
         end
     end
-    
-end
-
-% run matlabbatch
-n_procs = n_subs; % to not block to many cores on the server
-
-if n_procs > vars.max_procs
-    n_procs = vars.max_procs;
-end
-
-if vars.parallel == 1
-    run_spm_parallel(matlabbatch, n_procs);
-    %run_spm_multiple(matlabbatch, n_procs);
-else
-    run_spm_sequential(matlabbatch);
 end

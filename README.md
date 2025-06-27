@@ -47,4 +47,33 @@ sub-09	F	20	25879 25878(13)
 imports sub-09, with sessions 25879 and 25878. Series 13 in 25878 will be omitted
 
 3) all major functions were now renamed to start with sbp_
-4) many new options in sbp_analyses.m
+4) Can now do PPI analyses (Thanks to Lars Geuter for implementing this)
+5) Can now incorporate physio (retroicor type) correction with the TAPAS toolbox (Thanks to Leo Asan for implementing this)
+    
+
+# Physiological Noise correction
+- the function sbp_create_physio can be integrated into do_em_all in the same way as the other preprocessing/noise creation functions.
+
+IMPORTANT: Your smr files need to be stored as such:
+path.baseDir/physio/smr/sub-XX_ses-YY_physio.smr
+
+= OPERATIONS (functions found in utils) =:
+1. convert_physio_smr: converts raw SMR to mat-files that are readable for cleaning and regressor creation. via https://github.com/tjrantal/Spike-smr-reader
+2. clean_physio: cleans mats (divide into runs, clean excess scanner pulses / add scanner pulses where necessary) and saves as BIDS-compatible run-wise tsv files with jsons in func dirs
+3. create_tapas: Uses tapas toolbox to create txt file of 18 physiological noise regressors in func dirs of subjects.
+
+= OUTPUTS =:
+-BIDS-compatible run-wise tsv files of physiological data with jsons in func dir of each sub
+-txt file of 18 physiological noise regressors in func dirs of each sub.
+-info_physio mat file containing some info coming from tapas toolbox, in func dir of each sub
+
+= REQUIREMENTS =:
+1. TAPAS PhysIO Toolbox
+	Download:
+    **HAS TO BE DOWNLOADED**
+
+    https://github.com/translationalneuromodeling/tapas/releases
+    go to tapas_master and type tapas_init() in command line
+    you need to do this only once. It will be set up for good in your spm12 after
+
+ 
