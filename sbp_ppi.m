@@ -18,6 +18,11 @@ xY = ppi_specs;
 xY.out = Inf;
 xY.Ic = 1;
 
+% Optional t cond to find maximum activation
+if isfield(ppi_specs, 'tcon') 
+    xY.T = 2;
+end
+
 % gPPI input
 Uu = arrayfun(@(x) [x 1 1], ppi_specs.conds, 'UniformOutput', false);
 
@@ -75,7 +80,7 @@ mkdir(ppi_dir);
 % Save and cleanup
 SPM.swd  = ppi_dir;
 save(fullfile(ppi_dir, 'PPI.mat'), "ppi")
-rmdir(temp_dir, 's');
+%rmdir(temp_dir, 's');
 
 %% Estimate the model
 

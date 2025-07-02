@@ -677,6 +677,11 @@ for sub = 1:n_subs
                 rmdir(a_dir,'s'); % delete all
             end
         end
+
+        % TODO: make this better
+        if do_ppi && exist(ppi_dir, 'dir') == 7
+            rmdir(ppi_dir, 's');
+        end
         mkdir(a_dir);
         copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak'))); % copy this file into analysis directory as *.bak
         copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak'))); % and copy this file as it contains everything necessary to repeat the analysis
@@ -740,13 +745,18 @@ for sub = 1:n_subs
         n_ppi_conds      = numel(analysis.ppi.conds); 
         [glm_f_vec, ~]   = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, false, n_ppi_conds, p_mod, ana);
 
-        % TODO: here we can also have users define t-contrasts (based on
-        % the original analysis) that can be used to find activtation centers
+        % eff of interest
 
         matlabbatch{mbi, sub}.spm.stats.con.spmmat = {fullfile(a_dir,'SPM.mat')};
         matlabbatch{mbi, sub}.spm.stats.con.delete = 1;
         matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.name  = 'eff_of_int';
         matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.convec = {glm_f_vec};
+        % 
+        if isfield(ppi_specs, 'tcon') 
+            matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.name              = ppi_specs.tcon.name;
+            matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.convec            = ppi_specs.tcon.vec; %TODO: add handling of missing conditions
+            matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.sessrep = 'none';
+        end
         mbi = mbi + 1;
         
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string    = fullfile(a_dir,'SPM.mat');
@@ -786,6 +796,7 @@ for sub = 1:n_subs
 
     else
         a_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), anadirname);
+        n_ppi_conds = 0; % ensuring backwards compatibility
 
     end 
     
@@ -800,7 +811,7 @@ for sub = 1:n_subs
         cond_use{1} = 1:numel(new_t.spm.stats.fmri_spec.sess(1).cond);
     end
     
-    [f_vec, n_reg] = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, do_ppi, 0, p_mod, ana);
+    [f_vec, n_reg] = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, do_ppi, n_ppi_conds, p_mod, ana);
     template.spm.stats.con.consess{fco}.fcon.convec = {f_vec};
 
     % construct the effects of int contrast across runs (complicated because some conds might be missing in some runs)
