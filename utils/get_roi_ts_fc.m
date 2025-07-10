@@ -1,4 +1,4 @@
-function get_roi_ts_fc(SPM, wmean_file, back_file, sk, xY, Uu, prep)
+function data = get_roi_ts_fc(SPM, wmean_file, back_file, sk, xY, Uu, prep)
 
 % Versatile routine to extract time courses from sphere, masks etc
 % SPM refers to a design, necessary to account for nuisanec variables

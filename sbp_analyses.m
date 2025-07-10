@@ -303,6 +303,8 @@ for sub = 1:n_subs
 
         % Store final PPI directory path
         ppi_dir  = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('PPI_%s_%s', ppi_specs.str, anadirname));
+    
+    
     else
         a_dir    = fullfile(path.firstlevelDir,sprintf('sub-%02d',sub_id),anadirname);
     end
@@ -371,7 +373,7 @@ for sub = 1:n_subs
 
     p_mod           = analysis.p_mod(any_cond_exist); % prune pmods
 
-    if ~do_ppi % TODO: implement handling of missing conds for ppi
+    if ~do_ppi 
         if ~isempty(analysis.t_con)
             if any(~i_reg)
                 preserve   = find(~any(analysis.t_con(:,~i_reg),2)); % keep only those cons where we do not have weights in missing conds (incl param mods)
@@ -381,12 +383,19 @@ for sub = 1:n_subs
             t_con      = analysis.t_con(preserve,find(i_reg)); % prune t_con
             t_con_names= analysis.t_con_names(preserve); % ... and their names
         else
+           
             t_con      = []; 
             t_con_names= []; 
         end
     else
+         % For PPI: Keep original contrasts, will be handled later when creating 
+         % PPI regressors and adjusting contrast weights for missing conditions
         t_con       = analysis.t_con;
         t_con_names = analysis.t_con_names;
+
+        % save existing conds to ppi struct, bc info is needed by ppi
+        % script
+        ppi_specs.conds_done = find(i_reg);
     end
     
     cond_names = analysis.cond_names(any_cond_exist); % and prune conditions
@@ -742,7 +751,8 @@ for sub = 1:n_subs
 
         % first create f contrast for normal glm, we need this to clean the ppi regressors
         % (do_ppi set to false so that contrast is not created for ppi)
-        n_ppi_conds      = numel(analysis.ppi.conds); 
+        existing_ppi_conds = analysis.ppi.conds(any_cond_exist(analysis.ppi.conds));
+        n_ppi_conds = length(existing_ppi_conds); 
         [glm_f_vec, ~]   = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, false, n_ppi_conds, p_mod, ana);
 
         % eff of interest
@@ -778,20 +788,59 @@ for sub = 1:n_subs
     if do_ppi
         a_dir           = ppi_dir;
 
-        % set up ppi regressors  
-        n_ppi_conds      = numel(analysis.ppi.conds);
-        n_ppi_regressors = n_ppi_conds*2 + 1; % 1 psy + 1 ppi regressor for every condition + seed time series (= n_ppi_conds*2+1)
-        conds_done{sub}  = 1:n_ppi_regressors; %TODO: account for missing conds
+        % set up ppi regressors (accounting for missing conditions)
+        n_ppi_regressors = n_ppi_conds*2 + 1;
         n_cond = n_ppi_regressors;
+
+        % Create binary mask  to track existing regressors
+        % For a PPI model with 4 conditions (last one missing), the structure would be:
+        % Original model: [PSY1 PSY2 PSY3 PSY4 SEED PPI1 PPI2 PPI3 PPI4]
+        % i_reg:          [ 1    1    1    0    1    1    1    1    0  ]
+        i_reg = [];
+        
+        % First PSY regressors
+        for i = 1:numel(analysis.ppi.conds)
+            i_reg = [i_reg any_cond_exist(analysis.ppi.conds(i))];
+        end
+
+        % Add seed regressor (always exists)
+        i_reg = [i_reg 1];
+        % Add PPI regressors
+        for i = 1:numel(analysis.ppi.conds)
+            i_reg = [i_reg any_cond_exist(analysis.ppi.conds(i))];
+        end
+
+        % Store which regressors we have
+        % conds_done know relates to the design matrix with the PSY, PPI
+        % and seed regressors (and not to the original design matrix as
+        % earlier in the code)
+        conds_done{sub} = find(i_reg);
+
+        % Adjust t contrasts based on missing conds
+        if ~isempty(analysis.t_con)
+            if any(~i_reg)
+                preserve = find(~any(analysis.t_con(:,~i_reg),2)); % keep only those cons where we don't have weights in missing conds
+                t_con = analysis.t_con(preserve,find(i_reg)); % prune t_con
+                t_con_names = analysis.t_con_names(preserve); % ... and their names
+            else
+                preserve = 1:size(analysis.t_con,1);
+                t_con = analysis.t_con;
+                t_con_names = analysis.t_con_names;
+            end
+        else
+            t_con = [];
+            t_con_names = [];
+        end
 
         % Get the actual condition names for PPI regressors
         ppi_cond_names = analysis.cond_names(ppi_specs.conds);
 
         % Create regressor names
+        % Create final regressor names including PSY, SEED, and PPI terms
         cond_names = [
-            strcat('PSY_', ppi_cond_names), ...  % Psychological regressors
-            {sprintf('Y_%s', analysis.ppi.name)}, ... % Seed time series 
-            strcat('PPI_', ppi_cond_names)  % PPI interaction regressors
+            strcat('PSY_', ppi_cond_names(any_cond_exist(analysis.ppi.conds))), ...
+            {sprintf('Y_%s', analysis.ppi.name)}, ...
+            strcat('PPI_', ppi_cond_names(any_cond_exist(analysis.ppi.conds)))
         ];
 
     else

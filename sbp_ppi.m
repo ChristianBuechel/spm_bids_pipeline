@@ -23,18 +23,21 @@ if isfield(ppi_specs, 'tcon')
     xY.T = 2;
 end
 
-% gPPI input
-Uu = arrayfun(@(x) [x 1 1], ppi_specs.conds, 'UniformOutput', false);
+% get the correct design matrix indices, accounting for missing conds
+conds_indices = find(ismember(ppi_specs.conds_done, ppi_specs.conds));
+
+% Create Uu with correct indices for each condition
+Uu = arrayfun(@(x) [x 1 1], conds_indices, 'UniformOutput', false);
 
 % Extract ROI timeseries and create PPI terms
 ppi = get_roi_ts_fc(SPM, char(wm_file), char(epi_2_templ), ppi_specs.skernel, xY, Uu);
 
 %% Create new design matrix
 % Includes the PPI terms and the seed regressor into the design matrix 
-% and removes the experimental conditions (n_cond) from the design matrix
+% and removes the experimental conditions (numel(conds_done)) from the design matrix
 
 % save original condition names
-cond_names = extractBetween(SPM.xX.name(ppi_specs.conds), " ", "*");
+cond_names = extractBetween(SPM.xX.name(conds_indices), " ", "*");
 
 n_ppis = numel(ppi.xY.PPI); 
 
@@ -52,7 +55,7 @@ end
 % create final design matrix
 seed_ts        = normit(ppi.xY.PPI{1}.Y);         
 new_regressors = [psy_regressors seed_ts ppi_regressors];
-retain_idx     = n_cond+1:size(SPM.xX.X,2); % retain all regressors after the experimental conditions
+retain_idx     = numel(ppi_specs.conds_done)+1:size(SPM.xX.X,2); % retain all regressors after the experimental conditions
 SPM.xX.X       = [new_regressors, SPM.xX.X(:,retain_idx)];
 
 % Update regressor names
