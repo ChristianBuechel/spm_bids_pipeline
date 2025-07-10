@@ -1,4 +1,4 @@
-function sbp_ppi(SPM, n_cond, ppi_specs, epi_2_templ, wm_file)
+function sbp_ppi(SPM, ppi_specs, epi_2_templ, wm_file)
 
 % Creates and estimates a PPI model based on an existing first-level analysis
 % 1. Extracts PPI regressors

@@ -388,10 +388,23 @@ for sub = 1:n_subs
             t_con_names= []; 
         end
     else
-         % For PPI: Keep original contrasts, will be handled later when creating 
-         % PPI regressors and adjusting contrast weights for missing conditions
+        % For PPI: Keep original contrasts, will be handled later when creating 
+        % PPI regressors and adjusting contrast weights for missing conditions
         t_con       = analysis.t_con;
         t_con_names = analysis.t_con_names;
+
+        % Adjust ppi tcon used for optimizing ROI selection based on
+        % task-related activation. Can only be used if there are no missing conditions for this contrast 
+        if isfield(ppi_specs, 'tcon') 
+            preserve   = find(~any(ppi_specs.tcon.vec(:,~i_reg),2));
+            if preserve
+                % prune t con if needed
+                ppi_specs.tcon = ppi_specs.tcon.vec(find(i_reg));
+            else
+                ppi_specs = rmfield(ppi_specs, 'tcon');
+                warning('Sub # %d: tcon for 2pass approach discarded due to missing conditions\n', sub_id)
+            end
+        end
 
         % save existing conds to ppi struct, bc info is needed by ppi
         % script
@@ -770,10 +783,9 @@ for sub = 1:n_subs
         mbi = mbi + 1;
         
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string    = fullfile(a_dir,'SPM.mat');
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = n_cond; % we need the original number of conditions here
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{3}.evaluated = ppi_specs;
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{4}.string    = char(fullfile(mean_dir,'y_epi_2_template.nii')); %TODO: use BIDS instead of function input
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{5}.string    = char(spm_file(m_epi,'prefix','wmeana'));
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = ppi_specs;
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{3}.string    = char(fullfile(mean_dir,'y_epi_2_template.nii')); %TODO: use BIDS instead of function input
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{4}.string    = char(spm_file(m_epi,'prefix','wmeana'));
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'sbp_ppi';
         mbi = mbi + 1;
@@ -789,6 +801,8 @@ for sub = 1:n_subs
         a_dir           = ppi_dir;
 
         % set up ppi regressors (accounting for missing conditions)
+        existing_ppi_conds = analysis.ppi.conds(any_cond_exist(analysis.ppi.conds));
+        n_ppi_conds = length(existing_ppi_conds); 
         n_ppi_regressors = n_ppi_conds*2 + 1;
         n_cond = n_ppi_regressors;
 
