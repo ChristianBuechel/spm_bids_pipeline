@@ -66,14 +66,14 @@ end
 for i = 1:numel(xY) %loop across all ROIs
     fprintf('Doing ROI: %d\n',i);
     %start with finding the peak in the vicinity (xyz - rad)
-    if (strcmp(xY(i).spec,'sphere')) | (strcmp(xY(i).spec,'box'))
+    if (strcmp(xY(i).def,'sphere')) | (strcmp(xY(i).def,'box'))
         if isfield(xY(i),'T')
             V_T   = SPM.xCon(xY(i).T).Vspm; % T image to search peak
             if sk > 0
                 V_T = spm_smoothto16bit_s(V_T,sk);
             end
             xY(i).xyz_o  = xY(i).xyz;
-            xY(i).xyz    = get_max_coord(xY(i),V_T, V_wmean_scan, N_back_scan, xY(i).rad);
+            xY(i).xyz    = get_max_coord(xY(i),V_T, V_wmean_scan, N_back_scan, xY(i).spec);
         else
             xY(i).xyz_o = xY(i).xyz;
         end

@@ -388,6 +388,9 @@ for sub = 1:n_subs
             t_con_names= []; 
         end
     else
+
+        ppi_specs = analysis.ppi; % reinitialize ppi_specs
+
         % For PPI: Keep original contrasts, will be handled later when creating 
         % PPI regressors and adjusting contrast weights for missing conditions
         t_con       = analysis.t_con;
@@ -399,7 +402,7 @@ for sub = 1:n_subs
             preserve   = find(~any(ppi_specs.tcon.vec(:,~i_reg),2));
             if preserve
                 % prune t con if needed
-                ppi_specs.tcon = ppi_specs.tcon.vec(find(i_reg));
+                ppi_specs.tcon.vec = ppi_specs.tcon.vec(find(i_reg));
             else
                 ppi_specs = rmfield(ppi_specs, 'tcon');
                 warning('Sub # %d: tcon for 2pass approach discarded due to missing conditions\n', sub_id)
@@ -1362,6 +1365,13 @@ function [f_vec, n_reg] = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run,
         % PPI F-contrast
         n_ppi_regressors = n_ppi_conds*2 + 1;
         f_vec = [eye(n_ppi_regressors) zeros(n_ppi_regressors, n_nuis+n_o_run)];
+
+        % n_reg is a ones vector with as many elements as conditions (+1
+        % for any pmod). This vector is used to iterate over the conditions in the
+        % second level. For the ppi we need to account for the fact that
+        % the number of regressors changes. For now, pmods are not
+        % supported (TODO)
+        n_reg = ones(1, n_ppi_regressors);
     end
 
 end
