@@ -683,53 +683,102 @@ for sub = 1:n_subs
     
     if do_model
         if exist(a_dir,'dir') == 7
-            str = {[a_dir ' : contains SPM estimation files']};
-            if del_all
-                ret = 1;
+
+
+            if do_ppi
+
+                % TODO: maybe some further checks
+                
+                isSameDesign = true;
+                for ts = 1:numel(tsvfiles)
+                    old_tsv = fullfile(a_dir, spm_file(tsvfiles{ts}, 'filename'));
+                    if ~exist(old_tsv, 'file')
+                        isSameDesign = false;
+                        fprintf('Missing TSV file in existing model for sub-%02d\n', sub_id);
+                        break;
+                    end
+                end
+                
+
+                if isSameDesign
+                    fprintf('Model for sub-%02d unchanged, reusing existing model\n', sub_id);
+                    do_model = false;
+                    do_est = false;
+                    template = []; 
+                else
+                    % TODO: evtl crashen lassen?
+                    fprintf('Model changed for sub-%02d, creating new model\n', sub_id);
+                    rmdir(a_dir, 's');
+                    mkdir(a_dir);
+                    % Copy files only if design changed
+                    copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak')));
+                    copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak')));
+                    for ts = 1:numel(tsvfiles)
+                        copyfile(tsvfiles{ts},a_dir);
+                    end
+                end
+
+
             else
-                ret = spm_input(str,1,'bd','abort mission|del dir|del ALL dirs',[0,1,2],1);
+                % Non-PPI analysis: original interactive behavior
+                str = {[a_dir ' : contains SPM estimation files']};
+                if del_all
+                    ret = 1;
+                else
+                    ret = spm_input(str,1,'bd','abort mission|del dir|del ALL dirs',[0,1,2],1);
+                end
+                
+                if ret == 0
+                    spm('Pointer','Arrow')
+                    return
+                end
+                if ret == 1
+                    rmdir(a_dir,'s'); % delete all
+                end
+                if ret == 2
+                    del_all = 1;
+                    rmdir(a_dir,'s'); % delete all
+                end
+
+                % For non-PPI, always create directory and copy files
+                mkdir(a_dir);
+                copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak')));
+                copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak')));
+                for ts = 1:numel(tsvfiles)
+                    copyfile(tsvfiles{ts},a_dir);
+                end
             end
-            
-            if ret == 0
-                spm('Pointer','Arrow')
-                return
-            end
-            if ret == 1
-                rmdir(a_dir,'s'); % delete all
-            end
-            if ret == 2
-                del_all = 1;
-                rmdir(a_dir,'s'); % delete all
-            end
+       
         end
 
-        % TODO: make this better
+        % Delete the final ppi_dir if it exisits
         if do_ppi && exist(ppi_dir, 'dir') == 7
             rmdir(ppi_dir, 's');
         end
-        mkdir(a_dir);
-        copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak'))); % copy this file into analysis directory as *.bak
-        copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak'))); % and copy this file as it contains everything necessary to repeat the analysis
-        for ts = 1:numel(tsvfiles)
-            copyfile(tsvfiles{ts},a_dir); % and copy the respective *.tsv files that were used
-        end
-        template.spm.stats.fmri_spec.dir = {[a_dir]};
-        template_wls.spm.tools.rwls.fmri_rwls_spec.dir = template.spm.stats.fmri_spec.dir;
-        
-        if wls % decide whether we do WLS or OLS
-            matlabbatch{mbi,sub} = template_wls;
-        else
-            matlabbatch{mbi,sub} = template;
-        end
-        mbi = mbi + 1;
-        
-        if concatenate
-            matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
-            matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = scan_vec;
-            matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
-            matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'spm_fmri_concatenate';
+
+
+        % finalize fmri specification batch
+        % check do_model again bc PPI might have overwritten it
+        if do_model
+            template.spm.stats.fmri_spec.dir = {[a_dir]};
+            template_wls.spm.tools.rwls.fmri_rwls_spec.dir = template.spm.stats.fmri_spec.dir;
+            
+            if wls % decide whether we do WLS or OLS
+                matlabbatch{mbi,sub} = template_wls;
+            else
+                matlabbatch{mbi,sub} = template;
+            end
             mbi = mbi + 1;
+            
+            if concatenate
+                matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
+                matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = scan_vec;
+                matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
+                matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'spm_fmri_concatenate';
+                mbi = mbi + 1;
+            end
         end
+
     end
 
     if do_est
@@ -1374,4 +1423,42 @@ function [f_vec, n_reg] = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run,
         n_reg = ones(1, n_ppi_regressors);
     end
 
+end
+
+
+function isSameModel = compareModels(old_SPM, new_SPM)
+    isSameModel = true;
+    
+    % Compare design matrices
+    if ~isequal(old_SPM.SPM.xX.X, new_SPM.SPM.xX.X)
+        isSameModel = false;
+        return;
+    end
+    
+    % Compare high-pass filter settings
+    if ~isequal(old_SPM.SPM.xX.K.HParam, new_SPM.SPM.xX.K.HParam)
+        isSameModel = false;
+        return;
+    end
+    
+    % Compare non-sphericity settings
+    if ~isequal(old_SPM.SPM.xVi.form, new_SPM.SPM.xVi.form)
+        isSameModel = false;
+        return;
+    end
+    
+    % Compare basis functions
+    if ~isequal(old_SPM.SPM.xBF, new_SPM.SPM.xBF)
+        isSameModel = false;
+        return;
+    end
+    
+    % Compare mask settings if they exist
+    if isfield(old_SPM.SPM, 'xM') && isfield(new_SPM.SPM, 'xM')
+        if ~isequal(old_SPM.SPM.xM.T, new_SPM.SPM.xM.T) || ...
+           ~isequal(old_SPM.SPM.xM.TH, new_SPM.SPM.xM.TH)
+            isSameModel = false;
+            return;
+        end
+    end
 end
