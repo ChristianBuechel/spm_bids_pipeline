@@ -687,7 +687,20 @@ for sub = 1:n_subs
 
             if do_ppi
 
+                
+                % Default behavior in a PPI is that the base model will be specified and estimated,
+                % unless it is identical in the new analysis (e.g. same model but different PPI seed).
+                % In this case, we can skip model specification and estimation (i.e., set do_model and do_est to false).
+
                 % TODO: maybe some further checks
+                % Right now we only check for the info given by the directory name 
+                % (i.e., same task, same model type, same nuisance correction, same HRF model, same concatenation option). 
+                % Also we check for the name of the tsv file (but not for their content)-
+                % We might want to think for some further checks here.
+
+                do_model     = true;
+                do_est       = true; 
+                skip_model   = false; % if model is unchanged, we can skip everything
                 
                 isSameDesign = true;
                 for ts = 1:numel(tsvfiles)
@@ -702,12 +715,11 @@ for sub = 1:n_subs
 
                 if isSameDesign
                     fprintf('Model for sub-%02d unchanged, reusing existing model\n', sub_id);
-                    do_model = false;
-                    do_est = false;
-                    template = []; 
+                    skip_model = true;
                 else
                     % TODO: evtl crashen lassen?
                     fprintf('Model changed for sub-%02d, creating new model\n', sub_id);
+                    skip_model = false;
                     rmdir(a_dir, 's');
                     mkdir(a_dir);
                     % Copy files only if design changed
@@ -716,6 +728,12 @@ for sub = 1:n_subs
                     for ts = 1:numel(tsvfiles)
                         copyfile(tsvfiles{ts},a_dir);
                     end
+                end
+
+                if skip_model
+                    template = [];
+                    do_model = false;
+                    do_est = false; 
                 end
 
 
