@@ -117,6 +117,7 @@ else
     do_ppi          = false;
 end
 
+
 % second level
 do_fact         = analysis.do_fact;
 do_fact_con     = analysis.do_fact_con;
@@ -198,6 +199,12 @@ end
 
 if concatenate
     anadirname = ['Conc_' anadirname];
+end
+
+
+% Print PPI info
+if do_ppi
+    print_ppi_settings(analysis.ppi, anadirname, analysis.cond_names);
 end
 
 %% Main analyis loop
@@ -1444,39 +1451,40 @@ function [f_vec, n_reg] = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run,
 end
 
 
-function isSameModel = compareModels(old_SPM, new_SPM)
-    isSameModel = true;
+function print_ppi_settings(ppi_specs, anadirname, cond_names)
+    fprintf('\nDoing a PPI with the following settings:\n');
     
-    % Compare design matrices
-    if ~isequal(old_SPM.SPM.xX.X, new_SPM.SPM.xX.X)
-        isSameModel = false;
-        return;
+    % Print ROI info based on definition type
+    switch ppi_specs.def
+        case 'sphere'
+            fprintf('\tROI definition:\t\tsphere, %dmm radius at [%d %d %d]\n', ...
+                ppi_specs.spec, ...
+                round(ppi_specs.xyz(1)), round(ppi_specs.xyz(2)), round(ppi_specs.xyz(3)));
+        case 'mask'
+            [~, mask_name, ~] = fileparts(ppi_specs.spec);
+            fprintf('\tROI definition:\t\tmask "%s"\n', mask_name);
+        case 'box'
+            fprintf('\tROI definition:\t\tbox, %dmm at [%d %d %d]\n', ...
+                ppi_specs.spec, ...
+                round(ppi_specs.xyz(1)), round(ppi_specs.xyz(2)), round(ppi_specs.xyz(3)));
+        otherwise
+            fprintf('\tROI definition:\t\t%s\n', ppi_specs.def);
     end
     
-    % Compare high-pass filter settings
-    if ~isequal(old_SPM.SPM.xX.K.HParam, new_SPM.SPM.xX.K.HParam)
-        isSameModel = false;
-        return;
-    end
+    fprintf('\tROI name:\t\t%s\n', ppi_specs.name);
+    fprintf('\tPPI smoothing kernel:\t%d\n', ppi_specs.skernel);
+    fprintf('\tDeconvolution:\t\t%s\n', mat2str(ppi_specs.deconvolute));
+    fprintf('\tAnalysis directory:\t"%s"\n', anadirname);
     
-    % Compare non-sphericity settings
-    if ~isequal(old_SPM.SPM.xVi.form, new_SPM.SPM.xVi.form)
-        isSameModel = false;
-        return;
-    end
+    % Print actual condition names
+    fprintf('\tPPI conditions:\t\t');
+    ppi_cond_names = cond_names(ppi_specs.conds);
+    fprintf('"%s" ', ppi_cond_names{:});
+    fprintf('\n');
     
-    % Compare basis functions
-    if ~isequal(old_SPM.SPM.xBF, new_SPM.SPM.xBF)
-        isSameModel = false;
-        return;
+    % Add tcon info if available
+    if isfield(ppi_specs, 'tcon') && isfield(ppi_specs.tcon, 'name')
+        fprintf('\t2-pass t-contrast:\t"%s"\n', ppi_specs.tcon.name);
     end
-    
-    % Compare mask settings if they exist
-    if isfield(old_SPM.SPM, 'xM') && isfield(new_SPM.SPM, 'xM')
-        if ~isequal(old_SPM.SPM.xM.T, new_SPM.SPM.xM.T) || ...
-           ~isequal(old_SPM.SPM.xM.TH, new_SPM.SPM.xM.TH)
-            isSameModel = false;
-            return;
-        end
-    end
+    fprintf('\n');
 end
