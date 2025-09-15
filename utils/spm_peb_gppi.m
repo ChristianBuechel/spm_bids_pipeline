@@ -132,6 +132,12 @@ p.xY = varargin{2};
 xY(1) = p.xY;
 Sess  = SPM.Sess(xY(1).Sess);
 
+%======================================================================
+if nargin < 5
+    deconv = 0;
+else
+    deconv = varargin{5};
+end
 
 % Name of PPI file to be saved
 %--------------------------------------------------------------------------
@@ -208,7 +214,6 @@ for g=1:numel(Uu) %Uu needs to be a cell array
         PPI{g}.P = Yc(:,2);
     end
     
-    deconv = 0;
     if deconv
         
         % Specify covariance components; assume neuronal response is white

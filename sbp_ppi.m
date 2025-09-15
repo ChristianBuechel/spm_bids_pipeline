@@ -18,6 +18,14 @@ xY = ppi_specs;
 xY.out = Inf;
 xY.Ic = 1;
 
+% Deconvolution 
+if isfield(ppi_specs, 'deconvolute')
+    deconvolute = ppi_specs.deconvolute;
+else
+    deconvolute = false;
+    fprintf('No deconvolution option specified, defaulting to no deconvolution\n');
+end
+
 % Optional t cond to find maximum activation
 if isfield(ppi_specs, 'tcon') 
     xY.T = 2;
@@ -30,7 +38,7 @@ conds_indices = find(ismember(ppi_specs.conds_done, ppi_specs.conds));
 Uu = arrayfun(@(x) [x 1 1], conds_indices, 'UniformOutput', false);
 
 % Extract ROI timeseries and create PPI terms
-ppi = get_roi_ts_fc(SPM, char(wm_file), char(epi_2_templ), ppi_specs.skernel, xY, Uu);
+ppi = get_roi_ts_fc(SPM, char(wm_file), char(epi_2_templ), ppi_specs.skernel, xY, Uu, '', deconvolute);
 
 %% Create new design matrix
 % Includes the PPI terms and the seed regressor into the design matrix 

@@ -1,4 +1,4 @@
-function data = get_roi_ts_fc(SPM, wmean_file, back_file, sk, xY, Uu, prep)
+function data = get_roi_ts_fc(SPM, wmean_file, back_file, sk, xY, Uu, prep, deconv)
 
 % Versatile routine to extract time courses from sphere, masks etc
 % SPM refers to a design, necessary to account for nuisanec variables
@@ -32,6 +32,10 @@ tic;
 if nargin < 7
     prep = '';
 end
+if nargin < 8
+    deconv = false;
+end
+
 if ~isstruct(SPM)
     swd = spm_file(SPM,'fpath');
     try
@@ -129,7 +133,7 @@ for i = 1:numel(xY) %loop across all ROIs
         %temp_xY.u        = get_pc(ny);
         temp_xY.mean     = nanmean(ny,2);
         if ~isempty(Uu)
-            temp_xY.PPI = spm_peb_gppi(SPM,temp_xY,Uu,sprintf('%s_%d',xY(i).str,sess));
+            temp_xY.PPI = spm_peb_gppi(SPM,temp_xY,Uu,sprintf('%s_%d',xY(i).str,sess), deconv);
         end
         data(sess).xY(i) = temp_xY;
     end
