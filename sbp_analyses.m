@@ -1461,8 +1461,8 @@ function print_ppi_settings(ppi_specs, anadirname, cond_names)
                 ppi_specs.spec, ...
                 round(ppi_specs.xyz(1)), round(ppi_specs.xyz(2)), round(ppi_specs.xyz(3)));
         case 'mask'
-            [~, mask_name, ~] = fileparts(ppi_specs.spec);
-            fprintf('\tROI definition:\t\tmask "%s"\n', mask_name);
+            mask_name = ppi_specs.spec;
+            fprintf('\tROI definition:\t\tmask -- file path: "%s"\n', mask_name);
         case 'box'
             fprintf('\tROI definition:\t\tbox, %dmm at [%d %d %d]\n', ...
                 ppi_specs.spec, ...
