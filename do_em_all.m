@@ -1,0 +1,110 @@
+function do_em_all
+
+addpath(genpath('/home/keuter/scripts/spm_bids_pipeline'));
+
+%all_sub_ids =  [1:47 49:58];
+%all_sub_ids = [1:2]; % fir doesnt work for sub48 (no run on the right)
+
+%all_sub_ids  = [1:5 7:47 49:58]; % sub06 has only one valid movement in run6 -> beta cannot be fitted
+all_sub_ids = [1];
+%all_sub_ids = [48]; 
+
+do_import       = 0;
+do_preproc_nlin = 0;
+do_preproc_vdm  = 0;
+do_analysis     = 1;
+do_means        = 0;
+
+
+if do_import == 1
+    sbp_import_data(all_sub_ids);
+end
+
+if do_preproc_vdm == 1
+    % perform slice timing correction
+    sbp_slice_timing(all_sub_ids);
+    
+    % realign part 1 of 2
+    sbp_realign_1_2(all_sub_ids);
+    
+    % create vdm from fieldmap
+    sbp_create_vdm_fmap(all_sub_ids);
+    
+    % perform linear coregistration between T1 and EPIs
+    sbp_coreg_lin(all_sub_ids);
+
+    % perform T1 segmentation
+    sbp_seg_T1(all_sub_ids);
+
+    % perform skull stripping
+    sbp_skullstrip(all_sub_ids);
+    
+    % perform spatial normalization of T1 to Template space using DARTEL
+    sbp_create_dartel(all_sub_ids);
+    
+    % create various warp fields to map from EPI --> T1 --> Template space
+    sbp_create_trans_vdm(all_sub_ids)
+
+    % Create a masks for the 1st level GLM and brainstem
+    sbp_create_mask(all_sub_ids);
+    
+    % Warp a few images to Template space (skullstrip and mean EPI)
+    sbp_warp_vdm(all_sub_ids);
+
+    % realignemnt second step
+    sbp_realign_2_2_vdm(all_sub_ids);
+        
+    % realignemnt second step
+    sbp_apply_vdm(all_sub_ids);
+        
+    % Create 6 WM and 6 CSF noise regressors (and 6 regressors picking up noise
+    % from the posterior part of the lateral ventricle)
+    sbp_create_noise(all_sub_ids);
+end
+
+
+if do_preproc_nlin == 1
+    % perform slice timing correction
+    sbp_slice_timing(all_sub_ids);
+    
+    % realign part 1 of 2
+    sbp_realign_1_2(all_sub_ids);
+    
+    % perform non-linear coregistartion to get from EPI space to T1 space
+    sbp_coreg_nlin(all_sub_ids);
+    
+    % perform skull stripping
+    sbp_skullstrip(all_sub_ids);
+    
+    % perform spatial normalization of T1 to Template space using DARTEL
+    sbp_create_dartel(all_sub_ids);
+    
+    % create various warp fields to map from EPI --> T1 --> Template space
+    sbp_create_trans(all_sub_ids);
+    
+    % Create a masks for the 1st level GLM and brainstem
+    sbp_create_mask(all_sub_ids);
+    
+    % realignemnt second step
+    sbp_realign_2_2(all_sub_ids);
+    
+    % Warp a few images to Template space (skullstrip and mean EPI)
+    sbp_warp(all_sub_ids);
+        
+    % Create 6 WM and 6 CSF noise regressors (and 6 regressors picking up noise
+    % from the posterior part of the lateral ventricle)
+    sbp_create_noise(all_sub_ids);
+end
+
+if do_means == 1
+    % Create a mean skullstrip and a mean of mean EPIs
+    sbp_create_means(all_sub_ids);
+end
+
+if do_analysis == 1
+    % do analyses
+    sbp_analyses(all_sub_ids);    
+end
+end
+
+ 
