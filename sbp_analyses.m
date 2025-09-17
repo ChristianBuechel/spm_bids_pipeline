@@ -124,6 +124,13 @@ if isfield(analysis,'ppi')
             warning(['You are about to apply smoothing to the ppi seed time series in parallel mode.' ...
                 'This operation requires a significant amount of RAM and may cause your system to crash. Proceed with caution.'])
         end
+
+        % save the original value for do_model so that we can restore it later
+        % we need this bc we check for every subject if the we need to re-estimate the base model
+        % if it does not neeed to be re-estimated, do_model will be set to false for this subject
+        % later in the code. Thus, we save the original value here
+        orig_do_model = do_model; 
+        orig_do_est   = do_est; 
     end
 else
     do_ppi          = false;
@@ -409,6 +416,11 @@ for sub = 1:n_subs
     else
 
         ppi_specs = analysis.ppi(idx); % reinitialize ppi_specs
+
+        % Reset specification and estimation flags so that checks will 
+        % performed for every subject
+        do_model     = orig_do_model;
+        do_est       = orig_do_est; 
 
         % For PPI: Keep original contrasts, will be handled later when creating 
         % PPI regressors and adjusting contrast weights for missing conditions
@@ -717,8 +729,6 @@ for sub = 1:n_subs
                 % Also we check for the name of the tsv file (but not for their content)-
                 % We might want to think for some further checks here.
 
-                do_model     = true;
-                do_est       = true; 
                 skip_model   = false; % if model is unchanged, we can skip everything
                 
                 isSameDesign = true;

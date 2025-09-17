@@ -1,0 +1,8 @@
+- Reuse of existing models (no respecification or re-estimation required)
+	- Model checks are based on analysis name and event file names
+
+- Added parameter to enable/disable deconvolution (analysis.ppi_specs)
+
+- More verbose printing of PPI settings for easier debugging
+
+- PPI settings defined as struct arrays, allowing multiple PPI analyses to be run sequentially

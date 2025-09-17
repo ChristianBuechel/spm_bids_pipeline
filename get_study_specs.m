@@ -10,7 +10,7 @@ function [path,vars,analysis,import,qc] = get_study_specs
     path.physioDir       = fullfile(path.baseDir, 'physio');
     
     vars.max_procs   = 20; % how many parallel processes
-    vars.parallel    = 0;  % parallel processing?
+    vars.parallel    = 1;  % parallel processing?
     
     %% Import related stuff
     import.prisma        = '/home/keuter/projects/painact/data/bids/participants.tsv';
@@ -315,11 +315,6 @@ function [path,vars,analysis,import,qc] = get_study_specs
                                       0 0 0 0 0 -1 1 -1 1];
         analysis.t_con_names       = {'ppi_pain>nopain', 'ppi_move>nomove', 'ppi_move<nomove'};
 
-        % Select which PPI you want to run   
-        % TODO: add support for running PPIs sequentially
-        %current_ppi  = 2;
-        %analysis.ppi = analysis.ppi(current_ppi);
-    
     end
 
 

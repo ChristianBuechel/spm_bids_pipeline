@@ -1,6 +1,6 @@
 function run_multiple_ppis
   
-all_sub_ids = [1];
+all_sub_ids = [1:2];
 
 addpath(genpath('/home/keuter/scripts/spm_bids_pipeline'));
 
