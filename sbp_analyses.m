@@ -228,7 +228,12 @@ end
 
 %% Main analyis loop
 matlabbatch = [];
+del_all = 0;
+model_changed = false; 
+
+
 for sub = 1:n_subs
+    
     mbi        = 1;
     sub_id     = all_sub_ids(sub);
     if numel(sess_2_ana) > 1
@@ -324,7 +329,7 @@ for sub = 1:n_subs
     % directory handling
     if do_ppi
         % we use a temporary directory for the PPI analysis to specify and estimate the normal glm
-        temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('%s_tmp', anadirname));
+        temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('TMP_%s', anadirname));
         a_dir    = temp_dir;
 
         % Store final PPI directory path
@@ -713,11 +718,16 @@ for sub = 1:n_subs
     end
     
     if do_model
+
+        skip_model = false;
+
+        % In the ppi context, this is already a first check whether the base analysis has already been
+        % specified and estimated. 
         if exist(a_dir,'dir') == 7
 
 
             if do_ppi
-
+                
                 
                 % Default behavior in a PPI is that the base model will be specified and estimated,
                 % unless it is identical in the new analysis (e.g. same model but different PPI seed).
@@ -729,45 +739,56 @@ for sub = 1:n_subs
                 % Also we check for the name of the tsv file (but not for their content)-
                 % We might want to think for some further checks here.
 
-                skip_model   = false; % if model is unchanged, we can skip everything
-                
-                isSameDesign = true;
+                if ~exist(fullfile(a_dir, 'SPM.mat'), 'file')
+                    fprintf('Missing SPM.mat file for sub-%02d\n', sub_id);             
+                    model_changed = true;
+                    break
+                end
+                % Check whether event files exist and have the correct name
                 for ts = 1:numel(tsvfiles)
                     old_tsv = fullfile(a_dir, spm_file(tsvfiles{ts}, 'filename'));
                     if ~exist(old_tsv, 'file')
-                        isSameDesign = false;
-                        fprintf('Missing TSV file in existing model for sub-%02d\n', sub_id);
+                        model_changed = true;
+                        fprintf('Missing/different TSV file in existing model for sub-%02d\n', sub_id);
                         break;
                     end
                 end
                 
-
-                if isSameDesign
+                
+                if ~model_changed % i.e., base directory exists and event files are the same
                     fprintf('\nModel for sub-%02d unchanged, reusing existing model\n\n', sub_id);
                     skip_model = true;
-                else
-                    % TODO: evtl crashen lassen?
-                    fprintf('Model changed for sub-%02d, creating new model\n', sub_id);
-                    skip_model = false;
-                    rmdir(a_dir, 's');
-                    mkdir(a_dir);
-                    % Copy files only if design changed
-                    copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak')));
-                    copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak')));
-                    for ts = 1:numel(tsvfiles)
-                        copyfile(tsvfiles{ts},a_dir);
+                
+                else % base model does not exist or the event files have changed
+
+                    % In this case, the directory for the base analysis exisits, however, the design files have changes (or, at least their names)-
+                    % We will terminate the analysis here and ask the user to the delete the temp directory and re-run the analysis 
+
+                    % in this case we want to delete the old directories
+                    if ~del_all
+                        str = {[a_dir ' : model changed (different design files). All subject directories need to be deleted.']};
+                        ret = spm_input(str,1,'bd','abort mission|del ALL dirs',[0,1],1);
+                        
+                        if ret == 0
+                            spm('Pointer','Arrow')
+                            return
+                        else
+                            del_all = 1; % Set flag to delete all directories without asking again
+                        end
                     end
+
+
+                    matlabbatch = []; % Clear the batch
+                    break; % 
                 end
 
                 if skip_model
                     template = [];
-                    do_model = false;
-                    do_est = false; 
                 end
 
 
             else
-                % Non-PPI analysis: original interactive behavior
+                % Non-PPI analysis: original interactive behavior for existing directories
                 str = {[a_dir ' : contains SPM estimation files']};
                 if del_all
                     ret = 1;
@@ -796,17 +817,43 @@ for sub = 1:n_subs
                 end
             end
        
+
+
+
+        else % the analysis directory does not exist yet
+             % create analysis directory and copy this script and get_study_specs to it
+
+            if do_ppi
+                fprintf('Creating base model for PPI analysis for sub-%02d\n', sub_id);
+            end
+
+            mkdir(a_dir);
+            copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak')));
+            copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak')));
+            for ts = 1:numel(tsvfiles)
+                copyfile(tsvfiles{ts},a_dir);
+            end
+
+             %   if do_ppi
+              %      if ~exist(ppi_dir, 'dir')
+              %          mkdir(ppi_dir);
+              %      end
+              %  end
+
+            
+
+
         end
 
         % Delete the final ppi_dir if it exisits
-        if do_ppi && exist(ppi_dir, 'dir') == 7
-            rmdir(ppi_dir, 's');
-        end
+       % if do_ppi && exist(ppi_dir, 'dir') == 7
+       %     rmdir(ppi_dir, 's');
+       % end
 
 
         % finalize fmri specification batch
         % check do_model again bc PPI might have overwritten it
-        if do_model
+        if do_model && ~skip_model
             template.spm.stats.fmri_spec.dir = {[a_dir]};
             template_wls.spm.tools.rwls.fmri_rwls_spec.dir = template.spm.stats.fmri_spec.dir;
             
@@ -828,7 +875,7 @@ for sub = 1:n_subs
 
     end
 
-    if do_est
+    if do_est && ~skip_model
         if wls
             matlabbatch{mbi,sub}.spm.tools.rwls.fmri_rwls_est.spmmat = {fullfile(a_dir,'SPM.mat')};
             matlabbatch{mbi,sub}.spm.tools.rwls.fmri_rwls_est.method.Classical = 1;
@@ -857,6 +904,13 @@ for sub = 1:n_subs
 
 
     %% PPI
+
+    if do_ppi
+        % Create PPI directory if it doesn't exist
+        if ~exist(ppi_dir, 'dir')
+            mkdir(ppi_dir);
+        end
+    end
 
     if do_ppi && ~(do_fact || do_fact_con || do_one_t) %we only do this on the first level
 
@@ -1126,6 +1180,33 @@ for sub = 1:n_subs
     
 end
 
+% Check if model changed and exit if needed
+% ppi-specific
+% we need this cleanup section bc it can be  that the model has changed
+% for e.g. sub-02 but not for sub-01. However, to avoid corrupted analyes, we always
+% want to delete all directories if the model has changed for any subject
+
+if do_ppi
+    if model_changed
+        fprintf('\nModel changed. Deleting remaining directories...\n');
+        
+        % Delete directories for all subjects
+        for cleanup_sub = 1:n_subs
+            sub_id = all_sub_ids(cleanup_sub);
+
+            temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('TMP_%s', anadirname));
+
+            if exist(temp_dir,'dir')
+                rmdir(temp_dir,'s');
+            end
+
+        end
+        
+        fprintf('All directories deleted. Please re-run the analysis.\n');
+        return;
+    end
+    
+end
 if ~isempty(matlabbatch)
     % run matlabbatch
 
