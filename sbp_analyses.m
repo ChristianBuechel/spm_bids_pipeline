@@ -740,10 +740,26 @@ for sub = 1:n_subs
                 % We might want to think for some further checks here.
 
                 if ~exist(fullfile(a_dir, 'SPM.mat'), 'file')
-                    fprintf('Missing SPM.mat file for sub-%02d\n', sub_id);             
-                    model_changed = true;
-                    break
-                end
+                    fprintf('Missing SPM.mat file for sub-%02d - recreating base model\n', sub_id);
+                    
+                    % Delete and recreate only this subject's directories  
+                    if exist(a_dir, 'dir')
+                        rmdir(a_dir, 's');
+                    end
+                    if exist(ppi_dir, 'dir')
+                        rmdir(ppi_dir, 's');
+                    end
+                    
+                    % Create fresh directory
+                    mkdir(a_dir);
+                    copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak')));
+                    copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak')));
+                    for ts = 1:numel(tsvfiles)
+                        copyfile(tsvfiles{ts},a_dir);
+                    end
+                    
+                    skip_model = false;
+                else
                 % Check whether event files exist and have the correct name
                 for ts = 1:numel(tsvfiles)
                     old_tsv = fullfile(a_dir, spm_file(tsvfiles{ts}, 'filename'));
@@ -754,6 +770,7 @@ for sub = 1:n_subs
                     end
                 end
                 
+                end
                 
                 if ~model_changed % i.e., base directory exists and event files are the same
                     fprintf('\nModel for sub-%02d unchanged, reusing existing model\n\n', sub_id);
@@ -914,35 +931,38 @@ for sub = 1:n_subs
 
     if do_ppi && ~(do_fact || do_fact_con || do_one_t) %we only do this on the first level
 
-
-        % first create f contrast for normal glm, we need this to clean the ppi regressors
-        % (do_ppi set to false so that contrast is not created for ppi)
-        existing_ppi_conds = analysis.ppi(idx).conds(any_cond_exist(analysis.ppi(idx).conds));
-        n_ppi_conds = length(existing_ppi_conds); 
-        [glm_f_vec, ~]   = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, false, n_ppi_conds, p_mod, ana);
-
-        % eff of interest
-
-        matlabbatch{mbi, sub}.spm.stats.con.spmmat = {fullfile(a_dir,'SPM.mat')};
-        matlabbatch{mbi, sub}.spm.stats.con.delete = 1;
-        matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.name  = 'eff_of_int';
-        matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.convec = {glm_f_vec};
-        % 
-        if isfield(ppi_specs, 'tcon') 
-            matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.name              = ppi_specs.tcon.name;
-            matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.convec            = ppi_specs.tcon.vec; %TODO: add handling of missing conditions
-            matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.sessrep = 'none';
+        if ~skip_model
+            % For subjects creating new base models: create contrasts first
+            existing_ppi_conds = analysis.ppi(idx).conds(any_cond_exist(analysis.ppi(idx).conds));
+            n_ppi_conds = length(existing_ppi_conds); 
+            [glm_f_vec, ~]   = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, false, n_ppi_conds, p_mod, ana);
+    
+            % Create F-contrast
+            matlabbatch{mbi, sub}.spm.stats.con.spmmat = {fullfile(a_dir,'SPM.mat')};
+            matlabbatch{mbi, sub}.spm.stats.con.delete = 1;
+            matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.name  = 'eff_of_int';
+            matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.convec = {glm_f_vec};
+            
+            if isfield(ppi_specs, 'tcon') 
+                matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.name = ppi_specs.tcon.name;
+                matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.convec = ppi_specs.tcon.vec;
+                matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.sessrep = 'none';
+            end
+            mbi = mbi + 1;
+        else
+            % For subjects reusing base models: skip contrast creation
+            fprintf('Reusing existing base model for sub-%02d, skipping contrast creation\n', sub_id);
         end
-        mbi = mbi + 1;
         
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string    = fullfile(a_dir,'SPM.mat');
+        % PPI creation for ALL subjects (both new and existing base models)
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = ppi_specs;
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{3}.string    = char(fullfile(mean_dir,'y_epi_2_template.nii')); %TODO: use BIDS instead of function input
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{4}.string    = char(spm_file(m_epi,'prefix','wmeana'));
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{3}.string = char(fullfile(mean_dir,'y_epi_2_template.nii'));
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{4}.string = char(spm_file(m_epi,'prefix','wmeana'));
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'sbp_ppi';
         mbi = mbi + 1;
-
+    
     end
     
     
@@ -1205,7 +1225,7 @@ if do_ppi
         fprintf('All directories deleted. Please re-run the analysis.\n');
         return;
     end
-    
+
 end
 if ~isempty(matlabbatch)
     % run matlabbatch
