@@ -1,4 +1,4 @@
-function [path,vars,analysis,import,qc] = get_study_specs
+function [path,vars,analysis,import,qc] = get_study_specs_new
 
     %% path definitions
     path.baseDir     = '/home/keuter/projects/painact/data/bids';
@@ -94,228 +94,293 @@ function [path,vars,analysis,import,qc] = get_study_specs
     
     %% Analysis settings
     % the next section can be used to define different groups for 2nd level analysis
-    analysis.all_subs = 1:58;
-    %excluded_subs = [16, 43, 45, 48, 53, 56];
-    excluded_subs = [16, 43, 45, 53, 56];
-    analysis.all_subs(ismember(analysis.all_subs, excluded_subs)) = [];
- 
-    % group settings
-    single_group       = ones(size(analysis.all_subs));
-    analysis.group_ind  = single_group; %index 1
-    analysis.group_weights = [1];
-    analysis.group_ana_names   = {'All'};
-    
-    % exlusions
-    analysis.exclude(1) = struct('sub',48, 'ses',1, 'run', [6]);
-    
-    analysis.noise_corr        = ['mov24_wm_csf_roi_physio']; % can contain any combination of "mov6" "mov24" "wm" "csf" "roi" "physio"
-    analysis.cvi               = 'none'; % any of "AR(1)"  "FAST" "none" "wls" the latter uses J. Diedrichsen toolbox to do WLS https://www.diedrichsenlab.org/imaging/robustWLS.html
-    analysis.shift             = 0; % shift all onsets by n TRs 
-    analysis.skernel           = 6; % smoothing kernel
-    analysis.hpf               = 120;
-    analysis.bs                = 0; % do brainstem specific analysis (not fully implemented yet)
-    analysis.use_vasa          = 0; % do vasa correction https://www.sciencedirect.com/science/article/pii/S1053811915008484
-    
-    analysis.sess              = [1]; % which sessions to analyze (can be a vector)
-    analysis.prune             = 1;   % use only scnas that are relevant (e.g. skip scans at the end when there are no more stimuli)
-    
-    % what to do 1st level
-    analysis.do_model          = 1; % specify the model
-    analysis.do_est            = 1; % estimate the model
-    analysis.do_vasa           = 0; % estimate vasa image for correction
-    analysis.do_cons           = 1; % do contrasts
-    analysis.do_correct_vasa   = 0; % correct beta/con images using vasa image
-    analysis.do_warp           = 1; % warp native space con or beta images to template space
-    analysis.do_smooth         = 1; % smooth these warped beta and con images
-    
-    % what to do at the second level
-    analysis.fact_dept         = 0; % account for diff covariances at the 2nd level ANOVA
-    analysis.fact_var          = 0; % ... or only variances
-    analysis.do_fact           = 0; % simple anova that reproduces the 1st level anlysis at the 2nd level
-    analysis.do_fact_con       = 0; % do all contrasts at the second level
-    
-    analysis.do_one_t          = 0; % instead use the estimated cons from 1st level and do one sample t tests
-    
+    % We first define base settings that are typically used across analyses
+    % These can be overwritten below for specific analyses
 
     %whatto do
-
     do_hrf       = 0;
     do_hrf_param = 0;
     do_fir_cue   = 0;
     do_fir_stim  = 0;
     do_ppi       = 1;
 
+    idx = 0; % analysis counter
+
     if do_hrf    
+
+        idx = idx + 1;
         
-        analysis.concatenate       = 1; % concatenate or not ?
-        analysis.ana               = 2; % hrf
-        analysis.n_base            = 1;
-        analysis.name_ana          = 'painact_hrf_left2';
-        analysis.events            = ''; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_events_param.tsv
+        
+        analysis(idx) = get_analysis_defaults();
+
+        analysis(idx).concatenate       = 1; % concatenate or not ?
+        analysis(idx).ana               = 2; % hrf
+        analysis(idx).n_base            = 1;
+        analysis(idx).name_ana          = 'painact_hrf_left2';
+        analysis(idx).events            = ''; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_events_param.tsv
         % analysis.cond_names        = {'CUE_Pain-Move_L', 'CUE_Pain-noMove_L', 'CUE_noPain-Move_L', 'CUE_noPain-noMove_L', ...
         %                               'STM_Pain-Move_L', 'STM_Pain-noMove_L', 'STM_noPain-Move_L', 'STM_noPain-noMove_L', ...    
         %                               'CUE_Pain-Move_R', 'CUE_Pain-noMove_R', 'CUE_noPain-Move_R', 'CUE_noPain-noMove_R', ...
         %                               'STM_Pain-Move_R', 'STM_Pain-noMove_R', 'STM_noPain-Move_R', 'STM_noPain-noMove_R', ...  
         %                               'CUE_Rating', 'STM_Rating', 'Rating', 'CUE_invalid', 'STM_invalid'};
-        analysis.cond_names        = {'CUE_Pain-Move_L', 'CUE_Pain-noMove_L', 'CUE_noPain-Move_L', 'CUE_noPain-noMove_L', ...
-                                      'STM_Pain-Move_L', 'STM_Pain-noMove_L', 'STM_noPain-Move_L', 'STM_noPain-noMove_L', ...    
-                                      'CUE_Rating', 'STM_Rating', 'Rating', 'CUE_invalid', 'STM_invalid'};
+        analysis(idx).cond_names        = {'CUE_Pain-Move_L', 'CUE_Pain-noMove_L', 'CUE_noPain-Move_L', 'CUE_noPain-noMove_L', ...
+                                           'STM_Pain-Move_L', 'STM_Pain-noMove_L', 'STM_noPain-Move_L', 'STM_noPain-noMove_L', ...    
+                                            'CUE_Rating', 'STM_Rating', 'Rating', 'CUE_invalid', 'STM_invalid'};
         %'CUE_invalid', 'STM_invalid'
-        analysis.p_mod             = cell(1, numel(analysis.cond_names)); % vis and pain have 1 or 2 parametric modulators
+        analysis(idx).p_mod             = cell(1, numel(analysis.cond_names)); % vis and pain have 1 or 2 parametric modulators
         
     
-        [analysis.t_con, analysis.t_con_names] = get_T_contrasts_hrf_left(analysis.cond_names);
-        [analysis.f_con, analysis.f_con_names] = get_F_contrasts_hrf_left(analysis.cond_names);
-        %[analysis.t_con, analysis.t_con_names] = get_T_contrasts_hrf(analysis.cond_names);
-        %[analysis.f_con, analysis.f_con_names] = get_F_contrasts_hrf(analysis.cond_names);
-    
+        [analysis(idx).t_con, analysis(idx).t_con_names] = get_T_contrasts_hrf_left(analysis.cond_names);
+        [analysis(idx).f_con, analysis(idx).f_con_names] = get_F_contrasts_hrf_left(analysis.cond_names);
+
     
     end
     
     if do_hrf_param
-        analysis.concatenate       = 1; % concatenate or not ?
-        analysis.ana               = 2; % hrf
-        analysis.n_base            = 1;
-        analysis.name_ana          = 'painact_hrf_param';
-        analysis.events            = '_param'; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_events_param.tsv
+
+        idx = idx + 1;
+        analysis(idx) = get_analysis_defaults();
+
+        analysis(idx).concatenate       = 1; % concatenate or not ?
+        analysis(idx).ana               = 2; % hrf
+        analysis(idx).n_base            = 1;
+        analysis(idx).name_ana          = 'painact_hrf_param';
+        analysis(idx).events            = '_param'; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_events_param.tsv
         % cave: hyphens in event names dont work with pipeline, so I
         % updated the event files (not done for normal hrf analysis)
-        analysis.cond_names        = {'CUE_Pain_Move_L', 'CUE_Pain_noMove_L', 'CUE_noPain_Move_L', 'CUE_noPain_noMove_L', ...
+        analysis(idx).cond_names        = {'CUE_Pain_Move_L', 'CUE_Pain_noMove_L', 'CUE_noPain_Move_L', 'CUE_noPain_noMove_L', ...
                                       'STM_Pain_Move_L', 'STM_Pain_noMove_L', 'STM_noPain_Move_L', 'STM_noPain_noMove_L', ...    
                                       'CUE_Pain_Move_R', 'CUE_Pain_noMove_R', 'CUE_noPain_Move_R', 'CUE_noPain_noMove_R', ...
                                       'STM_Pain_Move_R', 'STM_Pain_noMove_R', 'STM_noPain_Move_R', 'STM_noPain_noMove_R', ...  
                                       'CUE_Rating', 'STM_Rating', 'Rating', 'CUE_invalid', 'STM_invalid'};
     
-        analysis.p_mod               = {{}, {}, {}, {}, ...
+        analysis(idx).p_mod               = {{}, {}, {}, {}, ...
                                         {'STM_Pain_Move_L_param'}, {}, {'STM_noPain_Move_L_param'}, {}, ...    
                                         {}, {}, {}, {}, ...
                                         {}, {}, {}, {}, ...  
                                         {}, {}, {}, {},{}};
     
-        [analysis.t_con, analysis.t_con_names] = get_T_contrasts_hrf_param;
-        [analysis.f_con, analysis.f_con_names] = get_F_contrasts_hrf_param;
+        [analysis(idx).t_con, analysis(idx).t_con_names] = get_T_contrasts_hrf_param;
+        [analysis(idx).f_con, analysis(idx).f_con_names] = get_F_contrasts_hrf_param;
 
     end
 
     if do_fir_cue
-        analysis.max_procs         = 12; % large DesMtx
-        analysis.concatenate       = 1;
-        analysis.t_con             = [];
-        analysis.t_con_names       = [];
-        analysis.ana               = 1; % fir
-        analysis.n_base            = 8;
-        analysis.bin_size          = 2; % in seconds
-        analysis.name_ana          = 'painact_fir_cue';
-        analysis.events            = ''; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_bold_param.tsv
-        analysis.cond_names        = {'CUE_Pain-Move_L', 'CUE_Pain-noMove_L', 'CUE_noPain-Move_L', 'CUE_noPain-noMove_L', ...
+        idx = idx + 1;
+        analysis(idx) = get_analysis_defaults();
+
+        analysis(idx).max_procs         = 12; % large DesMtx
+        analysis(idx).concatenate       = 1;
+        analysis(idx).t_con             = [];
+        analysis(idx).t_con_names       = [];
+        analysis(idx).ana               = 1; % fir
+        analysis(idx).n_base            = 8;
+        analysis(idx).bin_size          = 2; % in seconds
+        analysis(idx).name_ana          = 'painact_fir_cue';
+        analysis(idx).events            = ''; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_bold_param.tsv
+        analysis(idx).cond_names        = {'CUE_Pain-Move_L', 'CUE_Pain-noMove_L', 'CUE_noPain-Move_L', 'CUE_noPain-noMove_L', ...
                                       'CUE_Pain-Move_R', 'CUE_Pain-noMove_R', 'CUE_noPain-Move_R', 'CUE_noPain-noMove_R'}; % only cue
-        analysis.p_mod             = cell(1, numel(analysis.cond_names));
-        [analysis.f_con, analysis.f_con_names] = get_F_contrasts_fir(analysis.cond_names);
+        analysis(idx).p_mod             = cell(1, numel(analysis.cond_names));
+        [analysis(idx).f_con, analysis(idx).f_con_names] = get_F_contrasts_fir(analysis.cond_names);
     end
     
     if do_fir_stim
-        analysis.max_procs         = 12; % large DesMtx
-        analysis.concatenate       = 1;
-        analysis.t_con             = [];
-        analysis.t_con_names       = [];
-        analysis.ana               = 1; % fir
-        analysis.n_base            = 8;
-        analysis.bin_size          = 2; % in seconds
-        analysis.name_ana          = 'painact_fir_stim';
-        analysis.events            = ''; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_bold_param.tsv
-        analysis.cond_names        = {'STM_Pain-Move_L', 'STM_Pain-noMove_L', 'STM_noPain-Move_L', 'STM_noPain-noMove_L', ...
+
+        idx = idx + 1;
+        analysis(idx) = get_analysis_defaults();
+
+        analysis(idx).max_procs         = 12; % large DesMtx
+        analysis(idx).concatenate       = 1;
+        analysis(idx).t_con             = [];
+        analysis(idx).t_con_names       = [];
+        analysis(idx).ana               = 1; % fir
+        analysis(idx).n_base            = 8;
+        analysis(idx).bin_size          = 2; % in seconds
+        analysis(idx).name_ana          = 'painact_fir_stim';
+        analysis(idx).events            = ''; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_bold_param.tsv
+        analysis(idx).cond_names        = {'STM_Pain-Move_L', 'STM_Pain-noMove_L', 'STM_noPain-Move_L', 'STM_noPain-noMove_L', ...
                                       'STM_Pain-Move_R', 'STM_Pain-noMove_R', 'STM_noPain-Move_R', 'STM_noPain-noMove_R'}; % only stim
-        analysis.p_mod             = cell(1, numel(analysis.cond_names));
-        [analysis.f_con, analysis.f_con_names] = get_F_contrasts_fir(analysis.cond_names);
+        analysis(idx).p_mod             = cell(1, numel(analysis.cond_names));
+        [analysis(idx).f_con, analysis(idx).f_con_names] = get_F_contrasts_fir(analysis.cond_names);
     end
 
 
     if do_ppi      
 
-        analysis.do_ppi           = 1;
-
-        % BASE MODEL SETTINGS
-        analysis.concatenate       = 1; % concatenate or not ?
-        analysis.ana               = 2; % hrf
-        analysis.n_base            = 1;
-        analysis.name_ana          = 'painact_ppi_v3';
-        analysis.events            = ''; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_events_param.tsv
+        % Get PPI specifications
+        ppi_specs = get_ppi_specs();
         
-        analysis.cond_names        = {'CUE_Pain-Move_L', 'CUE_Pain-noMove_L', 'CUE_noPain-Move_L', 'CUE_noPain-noMove_L', ...
-                                      'STM_Pain-Move_L', 'STM_Pain-noMove_L', 'STM_noPain-Move_L', 'STM_noPain-noMove_L', ... 
-                                      'CUE_Pain-Move_R', 'CUE_Pain-noMove_R', 'CUE_noPain-Move_R', 'CUE_noPain-noMove_R', ...
-                                      'STM_Pain-Move_R', 'STM_Pain-noMove_R', 'STM_noPain-Move_R', 'STM_noPain-noMove_R', ...  
-                                      'CUE_Rating', 'STM_Rating', 'Rating', 'CUE_invalid', 'STM_invalid'};
-
-
-  
-        analysis.p_mod             = cell(1, numel(analysis.cond_names)); % vis and pain have 1 or 2 parametric modulators
+        % Store base model settings for PPI
+        ppi_base_settings             = get_analysis_defaults();
+        ppi_base_settings.do_ppi      = 1;
+        ppi_base_settings.concatenate = 1;
+        ppi_base_settings.ana         = 2; % hrf
+        ppi_base_settings.name_ana    = 'painact_ppi';
+        ppi_base_settings.n_base      = 1;
+        ppi_base_settings.events      =   '';
+        ppi_base_settings.cond_names  = {'CUE_Pain-Move_L', 'CUE_Pain-noMove_L', 'CUE_noPain-Move_L', 'CUE_noPain-noMove_L', ...
+                                        'STM_Pain-Move_L', 'STM_Pain-noMove_L', 'STM_noPain-Move_L', 'STM_noPain-noMove_L', ... 
+                                        'CUE_Pain-Move_R', 'CUE_Pain-noMove_R', 'CUE_noPain-Move_R', 'CUE_noPain-noMove_R', ...
+                                        'STM_Pain-Move_R', 'STM_Pain-noMove_R', 'STM_noPain-Move_R', 'STM_noPain-noMove_R', ...  
+                                        'CUE_Rating', 'STM_Rating', 'Rating', 'CUE_invalid', 'STM_invalid'};
+        ppi_base_settings.p_mod       = cell(1, numel(ppi_base_settings.cond_names));
         
-        % PPI SETTINGS
-        % analysis.ppi - Struct array defining psychophysiological interaction analyses
-        
-        % Fields:
-        %   def         - ROI definition type: 'sphere', 'mask', 'box', 'cluster', 'all'
-        %   spec        - ROI parameters depending on definition type:
-        %                 - For 'sphere'/'box': radius in mm 
-        %                 - For 'mask': full path to mask file
-        %   xyz         - [x y z]' coordinates in mm for sphere/box ROI centers (only for def='sphere'/'box')
-        %   str         - String identifier used for analysis directory naming
-        %   name        - ROI name used for PPI regressor labeling
-        %   skernel     - Smoothing kernel in mm applied to PPI seed time series
-        %   conds       - Vector of condition indices to include in PPI (references analysis.cond_names)
-        %   deconvolute - Boolean flag for HRF deconvolution of BOLD signal
-        %   tcon        - Optional struct for two-pass ROI optimization:
-        %                 .vec  - T-contrast vector to find peak activation within ROI
-        %                 .name - Name of the contrast for documentation
-        %
-        % Example usage:
-        %   analysis.ppi(1) = struct('def', 'sphere', 'spec', 6, 'xyz', [-39 -16.5 18]',...
-        %                           'str', 'dpINS_L_6mm', 'name', 'dpINS_L',...
-        %                           'skernel', 6, 'conds', 5:8, 'deconvolute', true,...
-        %   
-
-        analysis.ppi(1) = struct( ...
-                'def',         'sphere',    ...    
-                'spec',        6,           ...    
-                'xyz',         [-39 -16.5 18]', ...
-                'str',         'dpINS_L_test_6mm', ...  
-                'name',        'dpINS_L_test', ...       
-                'skernel',     6,           ...    
-                'conds',       5:8,         ...    
-                'deconvolute', true,        ...                                     
-                'tcon',        struct(...
-                    'vec',     [0 0 0 0 1 1 -1 0 1 0 0 0 0 0 0 0 0 0 0 0 0], ...
-                    'name',    'STM_L_Pain>Nopain' ...
-                ));
-
-        analysis.ppi(2) = struct( ...
-                'def',         'mask',    ...   
-                'spec',        '/home/keuter/projects/painact/masks/diedrichsen_mask.nii', ...   
-                'xyz',         NaN, ...
-                'str',         'cerebellum', ...   
-                'name',        'cerebellum', ...       
-                'skernel',     6,           ...    
-                'conds',       5:8,         ...    
-                'deconvolute', true,        ...                                     
-                'tcon',        struct(...
-                    'vec',     [0 0 0 0 1 1 -1 0 1 0 0 0 0 0 0 0 0 0 0 0 0], ...
-                    'name',    'STM_L_Pain>Nopain' ...
-                ));
-
         % PPI specific contrasts
         % Convention for PPI contrasts: [PSY_regs SEED PPI_regs]
         %
         % PSY_regs: psychological main effects (n columns = # conditions in ppi_specs.conds)
         % SEED:     seed region main effect (1 column)
         % PPI_regs: PPI interaction terms (n columns = # conditions)
+        ppi_base_settings.t_con       = [0 0 0 0 0 1 1 -1 -1;
+                                         0 0 0 0 0 1 -1 1 -1;
+                                         0 0 0 0 0 -1 1 -1 1];
+        ppi_base_settings.t_con_names = {'ppi_pain>nopain', 'ppi_move>nomove', 'ppi_move<nomove'};
+       
 
-        analysis.t_con             = [0 0 0 0 0 1 1 -1 -1;
-                                      0 0 0 0 0 1 -1 1 -1;
-                                      0 0 0 0 0 -1 1 -1 1];
-        analysis.t_con_names       = {'ppi_pain>nopain', 'ppi_move>nomove', 'ppi_move<nomove'};
 
+        for ppi_idx = 1:length(ppi_specs)
+            idx = idx + 1;
+
+            % Create a complete copy of the base settings
+            ppi_analysis = ppi_base_settings;
+            
+            % Add the region-specific name and PPI specification
+            ppi_analysis.ppi = ppi_specs(ppi_idx);
+
+            analysis(idx) = ppi_analysis;
+
+        end
+            % Create one analysis per PPI specification
+        % for ppi_idx = 1:length(ppi_specs)
+        %     idx = idx + 1;
+        % 
+        %     % For the first PPI, set the complete structure
+        %     if ppi_idx == 1
+        %         analysis(idx) = ppi_base_settings;
+        %         analysis(idx).ppi = ppi_specs(ppi_idx);
+        %     else
+        %         % For subsequent PPIs, set fields individually to maintain structure compatibility
+        %         % First, copy all fields from the previous PPI analysis
+        %         analysis(idx) = analysis(idx-1);
+        % 
+        %         % Then update only the fields that need to change
+        %         analysis(idx).ppi = ppi_specs(ppi_idx);
+        %     end
+        % 
+        % end
+     
     end
 
 
+end
+
+function defaults = get_analysis_defaults()
+    
+    % Returns a struct containing all default analysis settings
+    % these parameters tend to be the same across analyses.
+    % They can be overwritten by modifying the struct fields after calling this function.
+
+    defaults = struct();
+    
+    % Subject selection
+    defaults.all_subs = 1:58;
+    excluded_subs = [16, 43, 45, 53, 56];
+    defaults.all_subs(ismember(defaults.all_subs, excluded_subs)) = [];
+    
+    % Group settings
+    single_group = ones(size(defaults.all_subs));
+    defaults.group_ind = single_group;
+    defaults.group_weights = [1];
+    defaults.group_ana_names = {'All'};
+    
+    % Specific exclusions
+    defaults.exclude(1) = struct('sub', 48, 'ses', 1, 'run', [6]);
+    
+    % Model settings
+    defaults.noise_corr = 'mov24_wm_csf_roi_physio';
+    defaults.cvi = 'none';
+    defaults.shift = 0;
+    defaults.skernel = 6;
+    defaults.hpf = 120;
+    defaults.bs = 0;
+    defaults.use_vasa = 0;
+    
+    % Session settings
+    defaults.sess = [1];
+    defaults.prune = 1;
+    
+    % First level settings
+    defaults.do_model = 1;
+    defaults.do_est = 1;
+    defaults.do_vasa = 0;
+    defaults.do_cons = 1;
+    defaults.do_correct_vasa = 0;
+    defaults.do_warp = 1;
+    defaults.do_smooth = 1;
+    
+    % Second level settings
+    defaults.fact_dept = 0;
+    defaults.fact_var = 0;
+    defaults.do_fact = 0;
+    defaults.do_fact_con = 0;
+    defaults.do_one_t = 0;
+end
+
+function ppi_specs = get_ppi_specs()
+    % Define all PPI specifications
+
+     
+    % PPI SETTINGS
+    % analysis.ppi - Struct array defining psychophysiological interaction analyses
+    
+    % Fields:
+    %   def         - ROI definition type: 'sphere', 'mask', 'box', 'cluster', 'all'
+    %   spec        - ROI parameters depending on definition type:
+    %                 - For 'sphere'/'box': radius in mm 
+    %                 - For 'mask': full path to mask file
+    %   xyz         - [x y z]' coordinates in mm for sphere/box ROI centers (only for def='sphere'/'box')
+    %   str         - String identifier used for analysis directory naming
+    %   name        - ROI name used for PPI regressor labeling
+    %   skernel     - Smoothing kernel in mm applied to PPI seed time series
+    %   conds       - Vector of condition indices to include in PPI (references analysis.cond_names)
+    %   deconvolute - Boolean flag for HRF deconvolution of BOLD signal
+    %   tcon        - Optional struct for two-pass ROI optimization:
+    %                 .vec  - T-contrast vector to find peak activation within ROI
+    %                 .name - Name of the contrast for documentation
+    %
+    % Example usage:
+    %   analysis.ppi(1) = struct('def', 'sphere', 'spec', 6, 'xyz', [-39 -16.5 18]',...
+    %                           'str', 'dpINS_L_6mm', 'name', 'dpINS_L',...
+    %                           'skernel', 6, 'conds', 5:8, 'deconvolute', true,...
+    %   
+    
+    % First PPI: dpINS_L
+    ppi_specs(1) = struct( ...
+            'def',         'sphere',    ...    
+            'spec',        6,           ...    
+            'xyz',         [-39 -16.5 18]', ...
+            'str',         'dpINS_L_test_6mm', ...  
+            'name',        'dpINS_L_test', ...       
+            'skernel',     0,           ...    
+            'conds',       5:8,         ...    
+            'deconvolute', true,        ...                                     
+            'tcon',        struct(...
+                'vec',     [0 0 0 0 1 1 -1 -1 0 0 0 0 0 0 0 0 0 0 0 0 0], ...
+                'name',    'STM_L_Pain>Nopain' ...
+            ));
+    
+    % Second PPI: cerebellum
+    ppi_specs(2) = struct( ...
+            'def',         'mask',    ...   
+            'spec',        '/home/keuter/projects/painact/masks/diedrichsen_mask.nii', ...   
+            'xyz',         NaN, ...
+            'str',         'cerebellum', ...   
+            'name',        'cerebellum', ...       
+            'skernel',     0,           ...    
+            'conds',       5:8,         ...    
+            'deconvolute', true,        ...                                     
+            'tcon',        struct(...
+                'vec',     [0 0 0 0 1 1 -1 -1 0 0 0 0 0 0 0 0 0 0 0 0 0], ...
+                'name',    'STM_L_Pain>Nopain' ...
+            ));
 end

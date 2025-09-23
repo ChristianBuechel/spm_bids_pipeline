@@ -3,8 +3,8 @@ function sbp_analyses(all_sub_ids, idx)
 % performs 1st level and 2nd level analyses of all_sub_ids
 %
 %   all_sub_ids: Array of subject IDs to analyze
-%   idx: Optional index to select specific PPI analysis from analysis.ppi array
-%        If not provided, defaults to 1 (works with both single and multiple PPIs)
+%   idx: Optional index to select analysis from analysis struct array array
+%        If not provided, defaults to 1 
 %
 %
 % calls get_study_specs.m to get various options in the structure analysis.XXX 
@@ -73,6 +73,13 @@ BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 del_all      = 0;
 
+% pick the correct analysis
+if nargin < 2 || isempty(idx)
+    idx = 1;
+end
+analysis = analysis(idx);
+
+
 % house keeping
 con_temp          = 'con_%04.4d.nii';
 beta_temp         = 'beta_%04.4d.nii';
@@ -111,14 +118,9 @@ do_smooth       = analysis.do_smooth;
 if isfield(analysis,'ppi')
     do_ppi          = analysis.do_ppi; 
     if do_ppi
-        if nargin < 2 || isempty(idx)
-            idx = 1;
-        end
-        if idx > numel(analysis.ppi)
-            error('PPI index %d exceeds number of defined PPIs (%d)', idx, numel(analysis.ppi));
-        end
-        % Select specific PPI
-        ppi_specs = analysis.ppi(idx);
+
+        % get the ppi specs
+        ppi_specs = analysis.ppi;
     
         if parallel && ppi_specs.skernel > 0
             warning(['You are about to apply smoothing to the ppi seed time series in parallel mode.' ...
@@ -420,7 +422,7 @@ for sub = 1:n_subs
         end
     else
 
-        ppi_specs = analysis.ppi(idx); % reinitialize ppi_specs
+        ppi_specs = analysis.ppi; % reinitialize ppi_specs
 
         % Reset specification and estimation flags so that checks will 
         % performed for every subject
@@ -918,7 +920,7 @@ for sub = 1:n_subs
 
         if ~skip_model
             % For subjects creating new base models: create contrasts first
-            existing_ppi_conds = analysis.ppi(idx).conds(any_cond_exist(analysis.ppi(idx).conds));
+            existing_ppi_conds = ppi_specs.conds(any_cond_exist(ppi_specs.conds));
             n_ppi_conds = length(existing_ppi_conds); 
             [glm_f_vec, ~]   = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, false, n_ppi_conds, p_mod, ana);
     
@@ -957,7 +959,7 @@ for sub = 1:n_subs
         a_dir           = ppi_dir;
 
         % set up ppi regressors (accounting for missing conditions)
-        existing_ppi_conds = analysis.ppi(idx).conds(any_cond_exist(analysis.ppi(idx).conds));
+        existing_ppi_conds = ppi_specs.conds(any_cond_exist(ppi_specs.conds));
         n_ppi_conds = length(existing_ppi_conds); 
         n_ppi_regressors = n_ppi_conds*2 + 1;
         n_cond = n_ppi_regressors;
@@ -969,15 +971,15 @@ for sub = 1:n_subs
         i_reg = [];
         
         % First PSY regressors
-        for i = 1:numel(analysis.ppi(idx).conds)
-            i_reg = [i_reg any_cond_exist(analysis.ppi(idx).conds(i))];
+        for i = 1:numel(ppi_specs.conds)
+            i_reg = [i_reg any_cond_exist(ppi_specs.conds(i))];
         end
 
         % Add seed regressor (always exists)
         i_reg = [i_reg 1];
         % Add PPI regressors
-        for i = 1:numel(analysis.ppi(idx).conds)
-            i_reg = [i_reg any_cond_exist(analysis.ppi(idx).conds(i))];
+        for i = 1:numel(ppi_specs.conds)
+            i_reg = [i_reg any_cond_exist(ppi_specs.conds(i))];
         end
 
         % Store which regressors we have
@@ -1008,9 +1010,9 @@ for sub = 1:n_subs
         % Create regressor names
         % Create final regressor names including PSY, SEED, and PPI terms
         cond_names = [
-            strcat('PSY_', ppi_cond_names(any_cond_exist(analysis.ppi(idx).conds))), ...
-            {sprintf('Y_%s', analysis.ppi(idx).name)}, ...
-            strcat('PPI_', ppi_cond_names(any_cond_exist(analysis.ppi(idx).conds)))
+            strcat('PSY_', ppi_cond_names(any_cond_exist(ppi_specs.conds))), ...
+            {sprintf('Y_%s', ppi_specs.name)}, ...
+            strcat('PPI_', ppi_cond_names(any_cond_exist(ppi_specs.conds)))
         ];
 
     else
