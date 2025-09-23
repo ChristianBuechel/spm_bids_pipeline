@@ -739,27 +739,12 @@ for sub = 1:n_subs
                 % Also we check for the name of the tsv file (but not for their content)-
                 % We might want to think for some further checks here.
 
+                % Temp directory exists, check if SPM.mat exists
                 if ~exist(fullfile(a_dir, 'SPM.mat'), 'file')
-                    fprintf('Missing SPM.mat file for sub-%02d - recreating base model\n', sub_id);
-                    
-                    % Delete and recreate only this subject's directories  
-                    if exist(a_dir, 'dir')
-                        rmdir(a_dir, 's');
-                    end
-                    if exist(ppi_dir, 'dir')
-                        rmdir(ppi_dir, 's');
-                    end
-                    
-                    % Create fresh directory
-                    mkdir(a_dir);
-                    copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak')));
-                    copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak')));
-                    for ts = 1:numel(tsvfiles)
-                        copyfile(tsvfiles{ts},a_dir);
-                    end
-                    
-                    skip_model = false;
-                else
+                    warning('Missing SPM.mat file for sub-%02d. Please manually delete the directory run the analysis for this subject alone first to create the base model.', sub_id);
+                    return;  % Exit the entire function
+                end
+                
                 % Check whether event files exist and have the correct name
                 for ts = 1:numel(tsvfiles)
                     old_tsv = fullfile(a_dir, spm_file(tsvfiles{ts}, 'filename'));
@@ -770,8 +755,8 @@ for sub = 1:n_subs
                     end
                 end
                 
-                end
                 
+
                 if ~model_changed % i.e., base directory exists and event files are the same
                     fprintf('\nModel for sub-%02d unchanged, reusing existing model\n\n', sub_id);
                     skip_model = true;
@@ -949,9 +934,7 @@ for sub = 1:n_subs
                 matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.sessrep = 'none';
             end
             mbi = mbi + 1;
-        else
-            % For subjects reusing base models: skip contrast creation
-            fprintf('Reusing existing base model for sub-%02d, skipping contrast creation\n', sub_id);
+
         end
         
         % PPI creation for ALL subjects (both new and existing base models)
