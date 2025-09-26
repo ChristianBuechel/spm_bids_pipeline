@@ -233,6 +233,14 @@ matlabbatch = [];
 del_all = 0;
 model_changed = false; 
 
+% Check for mixed base model situation in PPI analysis
+% i.e., some subjects need to have the base model estimated, others not.
+% In this case we cannot continue as the matlabatch will be different
+if do_ppi
+    ppi_consistent= check_ppi_consistency(all_sub_ids, path, anadirname);
+    if ~ppi_consistent; return; end
+end
+
 
 for sub = 1:n_subs
     
@@ -1589,3 +1597,63 @@ function print_ppi_settings(ppi_specs, anadirname, cond_names)
     end
     fprintf('\n');
 end
+
+
+function consistent = check_ppi_consistency(all_sub_ids, path, anadirname)
+    % check_ppi_consistency - Check if PPI base models are consistent across subjects
+    %
+    % This function checks whether all subjects have base models for PPI analysis
+    % or if there's a mixed situation where some subjects have models and others don't.
+    %
+    % Inputs:
+    %   all_sub_ids - Array of subject IDs to check
+    %   path        - Structure containing path information
+    %   anadirname  - Name of the analysis directory
+    %
+    % Outputs:
+    %   consistent          - Boolean flag (true if all subjects are consistent)
+    %   subjects_need_model - Array of subject IDs that need base models
+    %   subjects_have_model - Array of subject IDs that have existing base models
+    %
+    % Example:
+    %   [is_consistent, need_model, have_model] = check_ppi_consistency(all_sub_ids, path, anadirname);
+    
+        subjects_need_model = [];
+        subjects_have_model = [];
+        consistent = true;
+        
+        fprintf('Checking PPI base model consistency across subjects...\n');
+        
+        for check_sub = 1:length(all_sub_ids)
+            check_sub_id = all_sub_ids(check_sub);
+            temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', check_sub_id), sprintf('TMP_%s', anadirname));
+            
+            % Check if directory exists and contains SPM.mat
+            if exist(temp_dir, 'dir') && exist(fullfile(temp_dir, 'SPM.mat'), 'file')
+                subjects_have_model = [subjects_have_model check_sub_id];
+            else
+                subjects_need_model = [subjects_need_model check_sub_id];
+            end
+        end
+        
+        % If we have a mixed situation (some with models, some without)
+        if ~isempty(subjects_need_model) && ~isempty(subjects_have_model)
+            consistent = false;
+            
+            % Print warning message
+            fprintf('\n===========================================================\n');
+            fprintf('INCONSISTENT BASE MODELS DETECTED FOR PPI ANALYSIS\n\n');
+            fprintf('Some subjects have base models while others need them created.\n');
+            fprintf('This will lead to inconsistent processing batches.\n\n');
+            fprintf('Subjects needing base models: %s\n', mat2str(subjects_need_model));
+            fprintf('Subjects with existing models: %s\n', mat2str(subjects_have_model));
+            fprintf('\nPlease run the analysis in two steps:\n');
+            fprintf('1. First run for subjects needing base models: %s\n', mat2str(subjects_need_model));
+            fprintf('2. Then run for all subjects\n');
+            fprintf('===========================================================\n\n');
+        elseif ~isempty(subjects_have_model) && isempty(subjects_need_model)
+            fprintf('All subjects have existing base models - proceeding with PPI analysis.\n\n');
+        elseif ~isempty(subjects_need_model) && isempty(subjects_have_model)
+            fprintf('All subjects need base models created - proceeding with model creation.\n\n');
+        end
+    end
