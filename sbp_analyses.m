@@ -760,7 +760,7 @@ for sub = 1:n_subs
                 
 
                 if ~model_changed % i.e., base directory exists and event files are the same
-                    fprintf('\nModel for sub-%02d unchanged, reusing existing model\n\n', sub_id);
+                    fprintf('\nBase model for sub-%02d unchanged, reusing existing model\n\n', sub_id);
                     skip_model = true;
                 
                 else % base model does not exist or the event files have changed
@@ -1193,7 +1193,7 @@ end
 
 if do_ppi
     if model_changed
-        fprintf('\nModel changed. Deleting remaining directories...\n');
+        fprintf('\nModel changed. Deleting remaining temp directories...\n');
         
         % Delete directories for all subjects
         for cleanup_sub = 1:n_subs
@@ -1207,7 +1207,7 @@ if do_ppi
 
         end
         
-        fprintf('All directories deleted. Please re-run the analysis.\n');
+        fprintf('All temp directories deleted. Please re-run the analysis.\n');
         return;
     end
 

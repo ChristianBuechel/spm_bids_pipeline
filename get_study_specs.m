@@ -1,4 +1,4 @@
-function [path,vars,analysis,import,qc] = get_study_specs_new
+function [path,vars,analysis,import,qc] = get_study_specs
 
     %% path definitions
     path.baseDir     = '/home/keuter/projects/painact/data/bids';
@@ -237,11 +237,10 @@ function [path,vars,analysis,import,qc] = get_study_specs_new
         ppi_base_settings.t_con_names = {'ppi_pain>nopain', 'ppi_move>nomove', 'ppi_move<nomove'};
        
 
-
+        % create the final analysis struct
         for ppi_idx = 1:length(ppi_specs)
             idx = idx + 1;
 
-            % Create a complete copy of the base settings
             ppi_analysis = ppi_base_settings;
             
             % Add the region-specific name and PPI specification
@@ -250,24 +249,6 @@ function [path,vars,analysis,import,qc] = get_study_specs_new
             analysis(idx) = ppi_analysis;
 
         end
-            % Create one analysis per PPI specification
-        % for ppi_idx = 1:length(ppi_specs)
-        %     idx = idx + 1;
-        % 
-        %     % For the first PPI, set the complete structure
-        %     if ppi_idx == 1
-        %         analysis(idx) = ppi_base_settings;
-        %         analysis(idx).ppi = ppi_specs(ppi_idx);
-        %     else
-        %         % For subsequent PPIs, set fields individually to maintain structure compatibility
-        %         % First, copy all fields from the previous PPI analysis
-        %         analysis(idx) = analysis(idx-1);
-        % 
-        %         % Then update only the fields that need to change
-        %         analysis(idx).ppi = ppi_specs(ppi_idx);
-        %     end
-        % 
-        % end
      
     end
 
@@ -323,6 +304,7 @@ function defaults = get_analysis_defaults()
     defaults.fact_var = 0;
     defaults.do_fact = 0;
     defaults.do_fact_con = 0;
+
     defaults.do_one_t = 0;
 end
 
