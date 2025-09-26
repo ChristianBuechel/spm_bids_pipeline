@@ -1,6 +1,11 @@
-function sbp_analyses(all_sub_ids)
+function sbp_analyses(all_sub_ids, idx)
 % function sbp_analyses(all_sub_ids)
 % performs 1st level and 2nd level analyses of all_sub_ids
+%
+%   all_sub_ids: Array of subject IDs to analyze
+%   idx: Optional index to select analysis from analysis struct array
+%        If not provided, defaults to 1 
+%
 %
 % calls get_study_specs.m to get various options in the structure analysis.XXX 
 % 
@@ -68,6 +73,13 @@ BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 del_all      = 0;
 
+% pick the correct analysis
+if nargin < 2 || isempty(idx)
+    idx = 1;
+end
+analysis = analysis(idx);
+
+
 % house keeping
 con_temp          = 'con_%04.4d.nii';
 beta_temp         = 'beta_%04.4d.nii';
@@ -106,16 +118,26 @@ do_smooth       = analysis.do_smooth;
 if isfield(analysis,'ppi')
     do_ppi          = analysis.do_ppi; 
     if do_ppi
+
+        % get the ppi specs
         ppi_specs = analysis.ppi;
     
         if parallel && ppi_specs.skernel > 0
             warning(['You are about to apply smoothing to the ppi seed time series in parallel mode.' ...
                 'This operation requires a significant amount of RAM and may cause your system to crash. Proceed with caution.'])
         end
+
+        % save the original value for do_model so that we can restore it later
+        % we need this bc we check for every subject if the we need to re-estimate the base model
+        % if it does not neeed to be re-estimated, do_model will be set to false for this subject
+        % later in the code. Thus, we save the original value here
+        orig_do_model = do_model; 
+        orig_do_est   = do_est; 
     end
 else
     do_ppi          = false;
 end
+
 
 % second level
 do_fact         = analysis.do_fact;
@@ -200,9 +222,28 @@ if concatenate
     anadirname = ['Conc_' anadirname];
 end
 
+
+% Print PPI info
+if do_ppi
+    print_ppi_settings(ppi_specs, anadirname, analysis.cond_names);
+end
+
 %% Main analyis loop
 matlabbatch = [];
+del_all = 0;
+model_changed = false; 
+
+% Check for mixed base model situation in PPI analysis
+% i.e., some subjects need to have the base model estimated, others not.
+% In this case we cannot continue as the matlabatch will be different
+if do_ppi
+    ppi_consistent= check_ppi_consistency(all_sub_ids, path, anadirname);
+    if ~ppi_consistent; return; end
+end
+
+
 for sub = 1:n_subs
+    
     mbi        = 1;
     sub_id     = all_sub_ids(sub);
     if numel(sess_2_ana) > 1
@@ -298,11 +339,13 @@ for sub = 1:n_subs
     % directory handling
     if do_ppi
         % we use a temporary directory for the PPI analysis to specify and estimate the normal glm
-        temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('%s_tmp', anadirname));
+        temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('TMP_%s', anadirname));
         a_dir    = temp_dir;
 
         % Store final PPI directory path
         ppi_dir  = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('PPI_%s_%s', ppi_specs.str, anadirname));
+    
+    
     else
         a_dir    = fullfile(path.firstlevelDir,sprintf('sub-%02d',sub_id),anadirname);
     end
@@ -371,7 +414,7 @@ for sub = 1:n_subs
 
     p_mod           = analysis.p_mod(any_cond_exist); % prune pmods
 
-    if ~do_ppi % TODO: implement handling of missing conds for ppi
+    if ~do_ppi 
         if ~isempty(analysis.t_con)
             if any(~i_reg)
                 preserve   = find(~any(analysis.t_con(:,~i_reg),2)); % keep only those cons where we do not have weights in missing conds (incl param mods)
@@ -381,12 +424,40 @@ for sub = 1:n_subs
             t_con      = analysis.t_con(preserve,find(i_reg)); % prune t_con
             t_con_names= analysis.t_con_names(preserve); % ... and their names
         else
+           
             t_con      = []; 
             t_con_names= []; 
         end
     else
+
+        ppi_specs = analysis.ppi; % reinitialize ppi_specs
+
+        % Reset specification and estimation flags so that checks will 
+        % performed for every subject
+        do_model     = orig_do_model;
+        do_est       = orig_do_est; 
+
+        % For PPI: Keep original contrasts, will be handled later when creating 
+        % PPI regressors and adjusting contrast weights for missing conditions
         t_con       = analysis.t_con;
         t_con_names = analysis.t_con_names;
+
+        % Adjust ppi tcon used for optimizing ROI selection based on
+        % task-related activation. Can only be used if there are no missing conditions for this contrast 
+        if isfield(ppi_specs, 'tcon') 
+            preserve   = find(~any(ppi_specs.tcon.vec(:,~i_reg),2));
+            if preserve
+                % prune t con if needed
+                ppi_specs.tcon.vec = ppi_specs.tcon.vec(find(i_reg));
+            else
+                ppi_specs = rmfield(ppi_specs, 'tcon');
+                warning('Sub # %d: tcon for 2pass approach discarded due to missing conditions\n', sub_id)
+            end
+        end
+
+        % save existing conds to ppi struct, bc info is needed by ppi
+        % script
+        ppi_specs.conds_done = find(i_reg);
     end
     
     cond_names = analysis.cond_names(any_cond_exist); % and prune conditions
@@ -657,57 +728,138 @@ for sub = 1:n_subs
     end
     
     if do_model
+
+        skip_model = false;
+
+        % In the ppi context, this is already a first check whether the base analysis has already been
+        % specified and estimated. 
         if exist(a_dir,'dir') == 7
-            str = {[a_dir ' : contains SPM estimation files']};
-            if del_all
-                ret = 1;
+
+
+            if do_ppi
+                
+                
+                % Default behavior in a PPI is that the base model will be specified and estimated,
+                % unless it is identical in the new analysis (e.g. same model but different PPI seed).
+                % In this case, we can skip model specification and estimation (i.e., set do_model and do_est to false).
+
+                % TODO: maybe some further checks
+                % Right now we only check for the info given by the directory name 
+                % (i.e., same task, same model type, same nuisance correction, same HRF model, same concatenation option). 
+                % Also we check for the name of the tsv file (but not for their content)-
+                % We might want to think for some further checks here.
+
+                % Temp directory exists, check if SPM.mat exists
+                if ~exist(fullfile(a_dir, 'SPM.mat'), 'file')
+                    warning('Missing SPM.mat file for sub-%02d. Please manually delete the directory run the analysis for this subject alone first to create the base model.', sub_id);
+                    return;  % Exit the entire function
+                end
+                
+                % Check whether event files exist and have the correct name
+                for ts = 1:numel(tsvfiles)
+                    old_tsv = fullfile(a_dir, spm_file(tsvfiles{ts}, 'filename'));
+                    if ~exist(old_tsv, 'file')
+                        model_changed = true;
+                        fprintf('Missing/different TSV file in existing model for sub-%02d\n', sub_id);
+
+                        % In this case, the directory for the base analysis exisits, however, the design files have changes (or, at least their names)-
+                        % We will terminate the analysis here and ask the user to the delete the temp directory and re-run the analysis.
+                        % This will be handled after the subject loop, so we break here.
+                        matlabbatch = []; % Clear the batch
+                        break
+
+                    end
+                end
+                
+                
+
+                if ~model_changed % i.e., base directory exists and event files are the same
+                    fprintf('\nBase model for sub-%02d unchanged, reusing existing model\n\n', sub_id);
+                    skip_model = true;
+                    template = [];
+                end
+                    
             else
-                ret = spm_input(str,1,'bd','abort mission|del dir|del ALL dirs',[0,1,2],1);
+                % Non-PPI analysis: original interactive behavior for existing directories
+                str = {[a_dir ' : contains SPM estimation files']};
+                if del_all
+                    ret = 1;
+                else
+                    ret = spm_input(str,1,'bd','abort mission|del dir|del ALL dirs',[0,1,2],1);
+                end
+                
+                if ret == 0
+                    spm('Pointer','Arrow')
+                    return
+                end
+                if ret == 1
+                    rmdir(a_dir,'s'); % delete all
+                end
+                if ret == 2
+                    del_all = 1;
+                    rmdir(a_dir,'s'); % delete all
+                end
+
+                % For non-PPI, always create directory and copy files
+                mkdir(a_dir);
+                copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak')));
+                copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak')));
+                for ts = 1:numel(tsvfiles)
+                    copyfile(tsvfiles{ts},a_dir);
+                end
             end
+       
+
+
+
+        else % the analysis directory does not exist yet
+             % create analysis directory and copy this script and get_study_specs to it
+
+            if do_ppi
+                fprintf('Creating base model for PPI analysis for sub-%02d\n', sub_id);
+            end
+
+            mkdir(a_dir);
+            copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak')));
+            copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak')));
+            for ts = 1:numel(tsvfiles)
+                copyfile(tsvfiles{ts},a_dir);
+            end
+
+
+        end
+
+        % Delete the final ppi_dir if it exisits
+       % if do_ppi && exist(ppi_dir, 'dir') == 7
+       %     rmdir(ppi_dir, 's');
+       % end
+
+
+        % finalize fmri specification batch
+        % check do_model again bc PPI might have overwritten it
+        if do_model && ~skip_model
+            template.spm.stats.fmri_spec.dir = {[a_dir]};
+            template_wls.spm.tools.rwls.fmri_rwls_spec.dir = template.spm.stats.fmri_spec.dir;
             
-            if ret == 0
-                spm('Pointer','Arrow')
-                return
+            if wls % decide whether we do WLS or OLS
+                matlabbatch{mbi,sub} = template_wls;
+            else
+                matlabbatch{mbi,sub} = template;
             end
-            if ret == 1
-                rmdir(a_dir,'s'); % delete all
-            end
-            if ret == 2
-                del_all = 1;
-                rmdir(a_dir,'s'); % delete all
+            mbi = mbi + 1;
+            
+            if concatenate
+                matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
+                matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = scan_vec;
+                matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
+                matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'spm_fmri_concatenate';
+                mbi = mbi + 1;
             end
         end
 
-        % TODO: make this better
-        if do_ppi && exist(ppi_dir, 'dir') == 7
-            rmdir(ppi_dir, 's');
-        end
-        mkdir(a_dir);
-        copyfile(which(mfilename),fullfile(a_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak'))); % copy this file into analysis directory as *.bak
-        copyfile(which('get_study_specs'),fullfile(a_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak'))); % and copy this file as it contains everything necessary to repeat the analysis
-        for ts = 1:numel(tsvfiles)
-            copyfile(tsvfiles{ts},a_dir); % and copy the respective *.tsv files that were used
-        end
-        template.spm.stats.fmri_spec.dir = {[a_dir]};
-        template_wls.spm.tools.rwls.fmri_rwls_spec.dir = template.spm.stats.fmri_spec.dir;
-        
-        if wls % decide whether we do WLS or OLS
-            matlabbatch{mbi,sub} = template_wls;
-        else
-            matlabbatch{mbi,sub} = template;
-        end
-        mbi = mbi + 1;
-        
-        if concatenate
-            matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
-            matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = scan_vec;
-            matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
-            matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'spm_fmri_concatenate';
-            mbi = mbi + 1;
-        end
     end
 
-    if do_est
+    if do_est && ~skip_model
         if wls
             matlabbatch{mbi,sub}.spm.tools.rwls.fmri_rwls_est.spmmat = {fullfile(a_dir,'SPM.mat')};
             matlabbatch{mbi,sub}.spm.tools.rwls.fmri_rwls_est.method.Classical = 1;
@@ -737,37 +889,45 @@ for sub = 1:n_subs
 
     %% PPI
 
+    if do_ppi
+        % Create PPI directory if it doesn't exist
+        if ~exist(ppi_dir, 'dir')
+            mkdir(ppi_dir);
+        end
+    end
+
     if do_ppi && ~(do_fact || do_fact_con || do_one_t) %we only do this on the first level
 
+        if ~skip_model
+            % For subjects creating new base models: create contrasts first
+            existing_ppi_conds = ppi_specs.conds(any_cond_exist(ppi_specs.conds));
+            n_ppi_conds = length(existing_ppi_conds); 
+            [glm_f_vec, ~]   = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, false, n_ppi_conds, p_mod, ana);
+    
+            % Create F-contrast
+            matlabbatch{mbi, sub}.spm.stats.con.spmmat = {fullfile(a_dir,'SPM.mat')};
+            matlabbatch{mbi, sub}.spm.stats.con.delete = 1;
+            matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.name  = 'eff_of_int';
+            matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.convec = {glm_f_vec};
+            
+            if isfield(ppi_specs, 'tcon') 
+                matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.name = ppi_specs.tcon.name;
+                matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.convec = ppi_specs.tcon.vec;
+                matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.sessrep = 'none';
+            end
+            mbi = mbi + 1;
 
-        % first create f contrast for normal glm, we need this to clean the ppi regressors
-        % (do_ppi set to false so that contrast is not created for ppi)
-        n_ppi_conds      = numel(analysis.ppi.conds); 
-        [glm_f_vec, ~]   = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, false, n_ppi_conds, p_mod, ana);
-
-        % eff of interest
-
-        matlabbatch{mbi, sub}.spm.stats.con.spmmat = {fullfile(a_dir,'SPM.mat')};
-        matlabbatch{mbi, sub}.spm.stats.con.delete = 1;
-        matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.name  = 'eff_of_int';
-        matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.convec = {glm_f_vec};
-        % 
-        if isfield(ppi_specs, 'tcon') 
-            matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.name              = ppi_specs.tcon.name;
-            matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.convec            = ppi_specs.tcon.vec; %TODO: add handling of missing conditions
-            matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.sessrep = 'none';
         end
-        mbi = mbi + 1;
         
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string    = fullfile(a_dir,'SPM.mat');
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = n_cond; % we need the original number of conditions here
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{3}.evaluated = ppi_specs;
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{4}.string    = char(fullfile(mean_dir,'y_epi_2_template.nii')); %TODO: use BIDS instead of function input
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{5}.string    = char(spm_file(m_epi,'prefix','wmeana'));
+        % PPI creation for ALL subjects (both new and existing base models)
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = ppi_specs;
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{3}.string = char(fullfile(mean_dir,'y_epi_2_template.nii'));
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{4}.string = char(spm_file(m_epi,'prefix','wmeana'));
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'sbp_ppi';
         mbi = mbi + 1;
-
+    
     end
     
     
@@ -778,20 +938,61 @@ for sub = 1:n_subs
     if do_ppi
         a_dir           = ppi_dir;
 
-        % set up ppi regressors  
-        n_ppi_conds      = numel(analysis.ppi.conds);
-        n_ppi_regressors = n_ppi_conds*2 + 1; % 1 psy + 1 ppi regressor for every condition + seed time series (= n_ppi_conds*2+1)
-        conds_done{sub}  = 1:n_ppi_regressors; %TODO: account for missing conds
+        % set up ppi regressors (accounting for missing conditions)
+        existing_ppi_conds = ppi_specs.conds(any_cond_exist(ppi_specs.conds));
+        n_ppi_conds = length(existing_ppi_conds); 
+        n_ppi_regressors = n_ppi_conds*2 + 1;
         n_cond = n_ppi_regressors;
+
+        % Create binary mask  to track existing regressors
+        % For a PPI model with 4 conditions (last one missing), the structure would be:
+        % Original model: [PSY1 PSY2 PSY3 PSY4 SEED PPI1 PPI2 PPI3 PPI4]
+        % i_reg:          [ 1    1    1    0    1    1    1    1    0  ]
+        i_reg = [];
+        
+        % First PSY regressors
+        for i = 1:numel(ppi_specs.conds)
+            i_reg = [i_reg any_cond_exist(ppi_specs.conds(i))];
+        end
+
+        % Add seed regressor (always exists)
+        i_reg = [i_reg 1];
+        % Add PPI regressors
+        for i = 1:numel(ppi_specs.conds)
+            i_reg = [i_reg any_cond_exist(ppi_specs.conds(i))];
+        end
+
+        % Store which regressors we have
+        % conds_done know relates to the design matrix with the PSY, PPI
+        % and seed regressors (and not to the original design matrix as
+        % earlier in the code)
+        conds_done{sub} = find(i_reg);
+
+        % Adjust t contrasts based on missing conds
+        if ~isempty(analysis.t_con)
+            if any(~i_reg)
+                preserve = find(~any(analysis.t_con(:,~i_reg),2)); % keep only those cons where we don't have weights in missing conds
+                t_con = analysis.t_con(preserve,find(i_reg)); % prune t_con
+                t_con_names = analysis.t_con_names(preserve); % ... and their names
+            else
+                preserve = 1:size(analysis.t_con,1);
+                t_con = analysis.t_con;
+                t_con_names = analysis.t_con_names;
+            end
+        else
+            t_con = [];
+            t_con_names = [];
+        end
 
         % Get the actual condition names for PPI regressors
         ppi_cond_names = analysis.cond_names(ppi_specs.conds);
 
         % Create regressor names
+        % Create final regressor names including PSY, SEED, and PPI terms
         cond_names = [
-            strcat('PSY_', ppi_cond_names), ...  % Psychological regressors
-            {sprintf('Y_%s', analysis.ppi.name)}, ... % Seed time series 
-            strcat('PPI_', ppi_cond_names)  % PPI interaction regressors
+            strcat('PSY_', ppi_cond_names(any_cond_exist(ppi_specs.conds))), ...
+            {sprintf('Y_%s', ppi_specs.name)}, ...
+            strcat('PPI_', ppi_cond_names(any_cond_exist(ppi_specs.conds)))
         ];
 
     else
@@ -964,6 +1165,46 @@ for sub = 1:n_subs
     
 end
 
+% Check if model changed and exit if needed
+% ppi-specific
+% we need this cleanup section here bc it can be  that the model has changed
+% for e.g. sub-02 but not for sub-01. However, to avoid corrupted analyes, we always
+% want to delete all directories if the model has changed for any subject
+
+if do_ppi
+    if model_changed
+        warning('\nModel changed for some subjects. You analysis may be corrupted\n');
+
+        % Ask user what to do with the directories
+        str = {'Model changed for some subjects. You analysis may be corrupted.'; ...
+               'Please select whether you want to abort the analysis, delete all temp directories and re-run the analysis,'; ...
+               'or abort and manually delete the temp directories and re-run'};
+
+
+        ret = spm_input(str,1,'bd','abort mission|del all dirs',[0,1],1);
+        
+        if ret == 0
+            fprintf('Analysis aborted. You may need to manually delete some temp directories.\n');
+            return;
+        elseif ret == 1
+            % Delete all directories
+            fprintf('Deleting all temp directories...\n');
+            for cleanup_sub = 1:n_subs
+                sub_id = all_sub_ids(cleanup_sub);
+                temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('TMP_%s', anadirname));
+                
+                if exist(temp_dir,'dir')
+                    rmdir(temp_dir,'s');
+                    fprintf('Deleted: %s\n', temp_dir);
+                end
+            end
+            fprintf('All temp directories deleted. Please re-run the analysis.\n');
+            return;
+        end
+    end
+end
+
+% end
 if ~isempty(matlabbatch)
     % run matlabbatch
 
@@ -1299,6 +1540,114 @@ function [f_vec, n_reg] = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run,
         % PPI F-contrast
         n_ppi_regressors = n_ppi_conds*2 + 1;
         f_vec = [eye(n_ppi_regressors) zeros(n_ppi_regressors, n_nuis+n_o_run)];
+
+        % n_reg is a ones vector with as many elements as conditions (+1
+        % for any pmod). This vector is used to iterate over the conditions in the
+        % second level. For the ppi we need to account for the fact that
+        % the number of regressors changes. For now, pmods are not
+        % supported (TODO)
+        n_reg = ones(1, n_ppi_regressors);
     end
 
 end
+
+
+function print_ppi_settings(ppi_specs, anadirname, cond_names)
+    fprintf('\nDoing a PPI with the following settings:\n');
+    
+    % Print ROI info based on definition type
+    switch ppi_specs.def
+        case 'sphere'
+            fprintf('\tROI definition:\t\tsphere, %dmm radius at [%d %d %d]\n', ...
+                ppi_specs.spec, ...
+                round(ppi_specs.xyz(1)), round(ppi_specs.xyz(2)), round(ppi_specs.xyz(3)));
+        case 'mask'
+            mask_name = ppi_specs.spec;
+            fprintf('\tROI definition:\t\tmask -- file path: "%s"\n', mask_name);
+        case 'box'
+            fprintf('\tROI definition:\t\tbox, %dmm at [%d %d %d]\n', ...
+                ppi_specs.spec, ...
+                round(ppi_specs.xyz(1)), round(ppi_specs.xyz(2)), round(ppi_specs.xyz(3)));
+        otherwise
+            fprintf('\tROI definition:\t\t%s\n', ppi_specs.def);
+    end
+    
+    fprintf('\tROI name:\t\t%s\n', ppi_specs.name);
+    fprintf('\tPPI smoothing kernel:\t%d\n', ppi_specs.skernel);
+    fprintf('\tDeconvolution:\t\t%s\n', mat2str(ppi_specs.deconvolute));
+    fprintf('\tAnalysis directory:\t"%s"\n', anadirname);
+    
+    % Print actual condition names
+    fprintf('\tPPI conditions:\t\t');
+    ppi_cond_names = cond_names(ppi_specs.conds);
+    fprintf('"%s" ', ppi_cond_names{:});
+    fprintf('\n');
+    
+    % Add tcon info if available
+    if isfield(ppi_specs, 'tcon') && isfield(ppi_specs.tcon, 'name')
+        fprintf('\t2-pass t-contrast:\t"%s"\n', ppi_specs.tcon.name);
+    end
+    fprintf('\n');
+end
+
+
+function consistent = check_ppi_consistency(all_sub_ids, path, anadirname)
+    % check_ppi_consistency - Check if PPI base models are consistent across subjects
+    %
+    % This function checks whether all subjects have base models for PPI analysis
+    % or if there's a mixed situation where some subjects have models and others don't.
+    % In this case, it advises the user to run the analysis in two steps since as of now
+    % our batch processing cannot handle mixed situations.
+    %
+    % Inputs:
+    %   all_sub_ids - Array of subject IDs to check
+    %   path        - Structure containing path information
+    %   anadirname  - Name of the analysis directory
+    %
+    % Outputs:
+    %   consistent          - Boolean flag (true if all subjects are consistent)
+    %   subjects_need_model - Array of subject IDs that need base models
+    %   subjects_have_model - Array of subject IDs that have existing base models
+    %
+    % Example:
+    %   [is_consistent, need_model, have_model] = check_ppi_consistency(all_sub_ids, path, anadirname);
+    
+        subjects_need_model = [];
+        subjects_have_model = [];
+        consistent = true;
+        
+        fprintf('Checking PPI base model consistency across subjects...\n');
+        
+        for check_sub = 1:length(all_sub_ids)
+            check_sub_id = all_sub_ids(check_sub);
+            temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', check_sub_id), sprintf('TMP_%s', anadirname));
+            
+            % Check if directory exists and contains SPM.mat
+            if exist(temp_dir, 'dir') && exist(fullfile(temp_dir, 'SPM.mat'), 'file')
+                subjects_have_model = [subjects_have_model check_sub_id];
+            else
+                subjects_need_model = [subjects_need_model check_sub_id];
+            end
+        end
+        
+        % If we have a mixed situation (some with models, some without)
+        if ~isempty(subjects_need_model) && ~isempty(subjects_have_model)
+            consistent = false;
+            
+            % Print warning message
+            fprintf('\n===========================================================\n');
+            fprintf('INCONSISTENT BASE MODELS DETECTED FOR PPI ANALYSIS\n\n');
+            fprintf('Some subjects have base models while others need them created.\n');
+            fprintf('This will lead to inconsistent processing batches.\n\n');
+            fprintf('Subjects needing base models: %s\n', mat2str(subjects_need_model));
+            fprintf('Subjects with existing models: %s\n', mat2str(subjects_have_model));
+            fprintf('\nPlease run the analysis in two steps:\n');
+            fprintf('1. First run for subjects needing base models: %s\n', mat2str(subjects_need_model));
+            fprintf('2. Then run for all subjects\n');
+            fprintf('===========================================================\n\n');
+        elseif ~isempty(subjects_have_model) && isempty(subjects_need_model)
+            fprintf('All subjects have existing base models - proceeding with PPI analysis.\n\n');
+        elseif ~isempty(subjects_need_model) && isempty(subjects_have_model)
+            fprintf('All subjects need base models created - proceeding with model creation.\n\n');
+        end
+    end

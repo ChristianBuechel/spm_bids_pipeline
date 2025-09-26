@@ -1,4 +1,4 @@
-function get_roi_ts_fc(SPM, wmean_file, back_file, sk, xY, Uu, prep)
+function data = get_roi_ts_fc(SPM, wmean_file, back_file, sk, xY, Uu, prep, deconv)
 
 % Versatile routine to extract time courses from sphere, masks etc
 % SPM refers to a design, necessary to account for nuisanec variables
@@ -32,6 +32,10 @@ tic;
 if nargin < 7
     prep = '';
 end
+if nargin < 8
+    deconv = false;
+end
+
 if ~isstruct(SPM)
     swd = spm_file(SPM,'fpath');
     try
@@ -66,14 +70,14 @@ end
 for i = 1:numel(xY) %loop across all ROIs
     fprintf('Doing ROI: %d\n',i);
     %start with finding the peak in the vicinity (xyz - rad)
-    if (strcmp(xY(i).spec,'sphere')) | (strcmp(xY(i).spec,'box'))
+    if (strcmp(xY(i).def,'sphere')) | (strcmp(xY(i).def,'box'))
         if isfield(xY(i),'T')
             V_T   = SPM.xCon(xY(i).T).Vspm; % T image to search peak
             if sk > 0
                 V_T = spm_smoothto16bit_s(V_T,sk);
             end
             xY(i).xyz_o  = xY(i).xyz;
-            xY(i).xyz    = get_max_coord(xY(i),V_T, V_wmean_scan, N_back_scan, xY(i).rad);
+            xY(i).xyz    = get_max_coord(xY(i),V_T, V_wmean_scan, N_back_scan, xY(i).spec);
         else
             xY(i).xyz_o = xY(i).xyz;
         end
@@ -129,7 +133,7 @@ for i = 1:numel(xY) %loop across all ROIs
         %temp_xY.u        = get_pc(ny);
         temp_xY.mean     = nanmean(ny,2);
         if ~isempty(Uu)
-            temp_xY.PPI = spm_peb_gppi(SPM,temp_xY,Uu,sprintf('%s_%d',xY(i).str,sess));
+            temp_xY.PPI = spm_peb_gppi(SPM,temp_xY,Uu,sprintf('%s_%d',xY(i).str,sess), deconv);
         end
         data(sess).xY(i) = temp_xY;
     end
