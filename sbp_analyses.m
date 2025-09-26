@@ -753,7 +753,13 @@ for sub = 1:n_subs
                     if ~exist(old_tsv, 'file')
                         model_changed = true;
                         fprintf('Missing/different TSV file in existing model for sub-%02d\n', sub_id);
-                        break;
+
+                        % In this case, the directory for the base analysis exisits, however, the design files have changes (or, at least their names)-
+                        % We will terminate the analysis here and ask the user to the delete the temp directory and re-run the analysis.
+                        % This will be handled after the subject loop, so we break here.
+                        matlabbatch = []; % Clear the batch
+                        break
+
                     end
                 end
                 
@@ -762,35 +768,9 @@ for sub = 1:n_subs
                 if ~model_changed % i.e., base directory exists and event files are the same
                     fprintf('\nBase model for sub-%02d unchanged, reusing existing model\n\n', sub_id);
                     skip_model = true;
-                
-                else % base model does not exist or the event files have changed
-
-                    % In this case, the directory for the base analysis exisits, however, the design files have changes (or, at least their names)-
-                    % We will terminate the analysis here and ask the user to the delete the temp directory and re-run the analysis 
-
-                    % in this case we want to delete the old directories
-                    if ~del_all
-                        str = {[a_dir ' : model changed (different design files). All subject directories need to be deleted.']};
-                        ret = spm_input(str,1,'bd','abort mission|del ALL dirs',[0,1],1);
-                        
-                        if ret == 0
-                            spm('Pointer','Arrow')
-                            return
-                        else
-                            del_all = 1; % Set flag to delete all directories without asking again
-                        end
-                    end
-
-
-                    matlabbatch = []; % Clear the batch
-                    break; % 
+                    template = []
                 end
-
-                if skip_model
-                    template = [];
-                end
-
-
+                    
             else
                 % Non-PPI analysis: original interactive behavior for existing directories
                 str = {[a_dir ' : contains SPM estimation files']};
@@ -1187,31 +1167,44 @@ end
 
 % Check if model changed and exit if needed
 % ppi-specific
-% we need this cleanup section bc it can be  that the model has changed
+% we need this cleanup section here bc it can be  that the model has changed
 % for e.g. sub-02 but not for sub-01. However, to avoid corrupted analyes, we always
 % want to delete all directories if the model has changed for any subject
 
 if do_ppi
     if model_changed
-        fprintf('\nModel changed. Deleting remaining temp directories...\n');
+        warning('\nModel changed for some subjects. You analysis may be corrupted\n');
+
+        % Ask user what to do with the directories
+        str = {'Model changed for some subjects. You analysis may be corrupted.'; ...
+               'Please select whether you want to abort the analysis, delete all temp directories and re-run the analysis,'; ...
+               'or abort and manually delete the temp directories and re-run'};
+
+
+        ret = spm_input(str,1,'bd','abort mission|del all dirs',[0,1],1);
         
-        % Delete directories for all subjects
-        for cleanup_sub = 1:n_subs
-            sub_id = all_sub_ids(cleanup_sub);
-
-            temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('TMP_%s', anadirname));
-
-            if exist(temp_dir,'dir')
-                rmdir(temp_dir,'s');
+        if ret == 0
+            fprintf('Analysis aborted. You may need to manually delete some temp directories.\n');
+            return;
+        elseif ret == 1
+            % Delete all directories
+            fprintf('Deleting all temp directories...\n');
+            for cleanup_sub = 1:n_subs
+                sub_id = all_sub_ids(cleanup_sub);
+                temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('TMP_%s', anadirname));
+                
+                if exist(temp_dir,'dir')
+                    rmdir(temp_dir,'s');
+                    fprintf('Deleted: %s\n', temp_dir);
+                end
             end
-
+            fprintf('All temp directories deleted. Please re-run the analysis.\n');
+            return;
         end
-        
-        fprintf('All temp directories deleted. Please re-run the analysis.\n');
-        return;
     end
-
 end
+
+% end
 if ~isempty(matlabbatch)
     % run matlabbatch
 
