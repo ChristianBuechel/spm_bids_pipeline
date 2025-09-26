@@ -51,29 +51,45 @@ imports sub-09, with sessions 25879 and 25878. Series 13 in 25878 will be omitte
 5) Can now incorporate physio (retroicor type) correction with the TAPAS toolbox (Thanks to Leo Asan for implementing this)
     
 
-# Physiological Noise correction
-- the function sbp_create_physio can be integrated into do_em_all in the same way as the other preprocessing/noise creation functions.
+# Pipeline for physio regressor creation 
 
-IMPORTANT: Your smr files need to be stored as such:
-path.baseDir/physio/smr/sub-XX_ses-YY_physio.smr
+
+IMPORTANT: 
+- you need to define path.physioDir, which is baseDir/physio.
+
+- in PhysioDir, you need to have a folder 'mat' or a folder 'smr', depending on which format your file is.
+- Your smr files need to be stored as such:
+	path.physioDir/physio/smr/sub-XX_ses-YY_physio.smr
+- Your mat files need to be stored as such:
+	path.physioDir/physio/mat/sub-XX_ses-YY_physio.mat
+	
+- if you have session-wise files and wish to exclude certain runs, you need to add a json sidecar, which has the following structure:
+{
+  "includedRuns": [1, NaN, 2, 3, 4]
+  }
+ where 1-4 are the runs that are included, and NaN is the run you want to exclude.
+ save this json sidecar with the same name and in the same location as your session file, with a .json extension.
 
 = OPERATIONS (functions found in utils) =:
-1. convert_physio_smr: converts raw SMR to mat-files that are readable for cleaning and regressor creation. via https://github.com/tjrantal/Spike-smr-reader
-2. clean_physio: cleans mats (divide into runs, clean excess scanner pulses / add scanner pulses where necessary) and saves as BIDS-compatible run-wise tsv files with jsons in func dirs
-3. create_tapas: Uses tapas toolbox to create txt file of 18 physiological noise regressors in func dirs of subjects.
+1. convert_and_clean_physio: flexibly reads in mat- or smr- session- or run-files, cleans them and converts them to BIDS-compatible TSV files and 
+2. create_tapas: Uses tapas toolbox to create txt file of 18 physiological noise regressors in func dirs of subjects.
+
 
 = OUTPUTS =:
 -BIDS-compatible run-wise tsv files of physiological data with jsons in func dir of each sub
 -txt file of 18 physiological noise regressors in func dirs of each sub.
 -info_physio mat file containing some info coming from tapas toolbox, in func dir of each sub
 
+
 = REQUIREMENTS =:
+
 1. TAPAS PhysIO Toolbox
 	Download:
-    **HAS TO BE DOWNLOADED**
+    **HAS TO BE DOWNLOADED AND INITIALIZED**
 
     https://github.com/translationalneuromodeling/tapas/releases
     go to tapas_master and type tapas_init() in command line
     you need to do this only once. It will be set up for good in your spm12 after
 
- 
+
+	

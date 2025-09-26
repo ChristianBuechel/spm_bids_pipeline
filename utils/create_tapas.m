@@ -1,30 +1,34 @@
 % Makes Physio Regressors
 function create_tapas(all_sub_ids)
-
-[path,vars]  = get_study_specs;
-BIDS         = spm_BIDS(path.preprocDir);
-n_subs       = length(all_sub_ids);
+[path,vars]     = get_study_specs;
+n_subs          = length(all_sub_ids);
+BIDS            = spm_BIDS(path.preprocDir);
+nSess           = vars.nSess;
+nRuns           = vars.nRuns;
+taskName        = vars.task;
+TR              = vars.sliceTiming.tr;
+nSlices         = vars.sliceTiming.nslices;
 
 for sub = 1:n_subs
     gi = 1;
 
-    for ses = 1:vars.nSess
-        for run = 1:4
-            epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',all_sub_ids(sub)),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+    for ses = 1:nSess
+        for run = 1:nRuns
+            epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',all_sub_ids(sub)),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',taskName,'type','bold');
             nScans = numel(spm_vol(epi{:,1}));
             % make batch input
             matlabbatch{gi,sub}.spm.tools.physio.save_dir = {''};
             matlabbatch{gi,sub}.spm.tools.physio.log_files.vendor = 'BIDS';
-            matlabbatch{gi,sub}.spm.tools.physio.log_files.cardiac = {fullfile(path.preprocDir, sprintf('sub-%02d/ses-%02d/func/sub-%02d_ses-%02d_task-%s_run-%02d_physio.tsv',all_sub_ids(sub),ses,all_sub_ids(sub),ses,vars.task,run))};
-            matlabbatch{gi,sub}.spm.tools.physio.log_files.respiration = {fullfile(path.preprocDir, sprintf('sub-%02d/ses-%02d/func/sub-%02d_ses-%02d_task-%s_run-%02d_physio.tsv',all_sub_ids(sub),ses,all_sub_ids(sub),ses,vars.task,run))};
+            matlabbatch{gi,sub}.spm.tools.physio.log_files.cardiac = spm_BIDS(BIDS,'data','sub',sprintf('%02d',all_sub_ids(sub)),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',taskName,'type','physio');
+            matlabbatch{gi,sub}.spm.tools.physio.log_files.respiration = spm_BIDS(BIDS,'data','sub',sprintf('%02d',all_sub_ids(sub)),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',taskName,'type','physio');
             matlabbatch{gi,sub}.spm.tools.physio.log_files.scan_timing = {''};
             matlabbatch{gi,sub}.spm.tools.physio.log_files.sampling_interval = [];
             matlabbatch{gi,sub}.spm.tools.physio.log_files.relative_start_acquisition = 0;
             matlabbatch{gi,sub}.spm.tools.physio.log_files.align_scan = 'first';
-            matlabbatch{gi,sub}.spm.tools.physio.scan_timing.sqpar.Nslices = 60;
+            matlabbatch{gi,sub}.spm.tools.physio.scan_timing.sqpar.Nslices = nSlices;
             matlabbatch{gi,sub}.spm.tools.physio.scan_timing.sqpar.NslicesPerBeat = [];
-            matlabbatch{gi,sub}.spm.tools.physio.scan_timing.sqpar.TR = 1.8;
-            matlabbatch{gi,sub}.spm.tools.physio.scan_timing.sqpar.Ndummies = 0;
+            matlabbatch{gi,sub}.spm.tools.physio.scan_timing.sqpar.TR = TR;
+            matlabbatch{gi,sub}.spm.tools.physio.scan_timing.sqpar.Ndummies = 0;                        % IMPORTANT: Needs to be 0, because we cropped out dummies in step 2!
             matlabbatch{gi,sub}.spm.tools.physio.scan_timing.sqpar.Nscans = nScans;
             matlabbatch{gi,sub}.spm.tools.physio.scan_timing.sqpar.onset_slice = 1;
             matlabbatch{gi,sub}.spm.tools.physio.scan_timing.sqpar.time_slice_to_slice = [];
@@ -38,9 +42,8 @@ for sub = 1:n_subs
             matlabbatch{gi,sub}.spm.tools.physio.preproc.cardiac.posthoc_cpulse_select.off = struct([]);
             matlabbatch{gi,sub}.spm.tools.physio.preproc.respiratory.filter.passband = [0.01 2];
             matlabbatch{gi,sub}.spm.tools.physio.preproc.respiratory.despike = true;
-            matlabbatch{gi,sub}.spm.tools.physio.model.output_multiple_regressors = [path.preprocDir,sprintf('/sub-%02d/',all_sub_ids(sub)),sprintf('ses-%02d/',ses),'func/',sprintf('physio_sub-%02d_ses-%02d_task-%s_run-%02d_bold.txt',all_sub_ids(sub),ses,vars.task,run)];
-            matlabbatch{gi,sub}.spm.tools.physio.model.output_physio = [path.preprocDir,sprintf('/sub-%02d/',all_sub_ids(sub)),sprintf('ses-%02d/',ses),'func/',sprintf('info_physio_sub-%02d_ses-%02d_task-%s_run-%02d.mat',all_sub_ids(sub),ses,vars.task,run)];
-            %matlabbatch{gi,sub}.spm.tools.physio.model.output_physio = 0;
+            matlabbatch{gi,sub}.spm.tools.physio.model.output_multiple_regressors = [path.preprocDir,sprintf('/sub-%02d/',all_sub_ids(sub)),sprintf('ses-%02d/',ses),'func/',sprintf('physio_sub-%02d_ses-%02d_task-%s_run-%02d_bold.txt',all_sub_ids(sub),ses,taskName,run)];
+            matlabbatch{gi,sub}.spm.tools.physio.model.output_physio = [path.preprocDir,sprintf('/sub-%02d/',all_sub_ids(sub)),sprintf('ses-%02d/',ses),'func/',sprintf('info-physio_sub-%02d_ses-%02d_task-%s_run-%02d.mat',all_sub_ids(sub),ses,taskName,run)];
             matlabbatch{gi,sub}.spm.tools.physio.model.orthogonalise = 'none';
             matlabbatch{gi,sub}.spm.tools.physio.model.censor_unreliable_recording_intervals = false;
             matlabbatch{gi,sub}.spm.tools.physio.model.retroicor.yes.order.c = 3;
@@ -74,5 +77,3 @@ else
     run_spm_sequential(matlabbatch);
 end
 
-
-end

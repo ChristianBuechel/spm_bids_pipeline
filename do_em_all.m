@@ -6,14 +6,14 @@ addpath(genpath('/home/keuter/scripts/spm_bids_pipeline'));
 %all_sub_ids = [1:2]; % fir doesnt work for sub48 (no run on the right)
 
 %all_sub_ids  = [1:5 7:47 49:58]; % sub06 has only one valid movement in run6 -> beta cannot be fitted
-all_sub_ids = [1:2];
+all_sub_ids = [1:3];
 %all_sub_ids = [48]; 
 
 do_import       = 0;
 do_preproc_nlin = 0;
 do_preproc_vdm  = 0;
 do_analysis     = 1;
-do_means        = 0
+do_means        = 0;
 
 
 if do_import == 1
