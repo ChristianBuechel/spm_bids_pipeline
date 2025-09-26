@@ -3,7 +3,7 @@ function sbp_analyses(all_sub_ids, idx)
 % performs 1st level and 2nd level analyses of all_sub_ids
 %
 %   all_sub_ids: Array of subject IDs to analyze
-%   idx: Optional index to select analysis from analysis struct array array
+%   idx: Optional index to select analysis from analysis struct array
 %        If not provided, defaults to 1 
 %
 %
@@ -776,7 +776,7 @@ for sub = 1:n_subs
                 if ~model_changed % i.e., base directory exists and event files are the same
                     fprintf('\nBase model for sub-%02d unchanged, reusing existing model\n\n', sub_id);
                     skip_model = true;
-                    template = []
+                    template = [];
                 end
                     
             else
@@ -825,14 +825,6 @@ for sub = 1:n_subs
             for ts = 1:numel(tsvfiles)
                 copyfile(tsvfiles{ts},a_dir);
             end
-
-             %   if do_ppi
-              %      if ~exist(ppi_dir, 'dir')
-              %          mkdir(ppi_dir);
-              %      end
-              %  end
-
-            
 
 
         end
@@ -1604,6 +1596,8 @@ function consistent = check_ppi_consistency(all_sub_ids, path, anadirname)
     %
     % This function checks whether all subjects have base models for PPI analysis
     % or if there's a mixed situation where some subjects have models and others don't.
+    % In this case, it advises the user to run the analysis in two steps since as of now
+    % our batch processing cannot handle mixed situations.
     %
     % Inputs:
     %   all_sub_ids - Array of subject IDs to check
