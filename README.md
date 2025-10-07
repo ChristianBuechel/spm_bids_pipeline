@@ -3,9 +3,10 @@ Includes a function to download the data from the ISN DICOM data base to the pro
 
 THIS IS A MAJOR REVISION, it is very likely that you have adapt your scripts if you have used a previous version
 
+## Organisation  
 
 **The data are organized like this:**  
-# Organisation  
+
 c:\lcpa - the top data directory  
 inside you will get a directory \derivatives  
 The data import routine (sbp_import_data.m) will put all images in /derivatives/spm_preprocessing but will also make a  
@@ -22,7 +23,7 @@ In this wrapper function make sure to strat with an
 inside derivatives you have spm_preprocessing where all the data goes using \sub-01 etc  
 inside sub-01 you have \anat and \func (and \fmap if specified)  
 
-Before you start you need to create a **get_study_specs.m** in your "scripts" folder. There is an example inside the repository "get_study_specs.txt"  
+Before you start you need to create a get_study_specs.m in your "scripts" folder. There is an example inside the repository "get_study_specs.txt"  
 Copy it to "scripts" edit it and rename it to "get_study_specs.m"  
 
 Then you should create a wrapper file such as "do_em_all.m" that will sequentially call the subfunctions in the repository  
@@ -34,7 +35,18 @@ Both workflows are described in **do_em_all.txt**
 This toolbox now also includes quality control routines found in \qc by Alexandra Tinnermann
 See full_diagn_qc.txt for how to call these functions. 
 
-# New features
+## New features
+
+### 10/25
+
+1) Multiple Analysis Definition: ``analysis`` is now a struct array instead of single struct, allowing multiple analyses to be run sequentially. This includes a major overhaul of the get_study_specs structure. All changes are backwards compatible
+
+2) Overhauled PPI analysis: now includes reuse of existing base models, improved consistency checks across subjects, and better user interaction for managing corrupted analyses
+
+3) Critical bug fix to physio regressor creation pipeline. 
+
+### 06/25
+
 1) The new version of the toolbox now also incorporates correction with fieldmaps using VDM files.
 
 2) The new version uses an extension to participants.tsv using a column labeled 'scan_id' (the old import still works)
@@ -47,11 +59,11 @@ sub-09	F	20	25879 25878(13)
 imports sub-09, with sessions 25879 and 25878. Series 13 in 25878 will be omitted
 
 3) all major functions were now renamed to start with sbp_
-4) Can now do PPI analyses (Thanks to Lars Geuter for implementing this)
+4) Can now do PPI analyses (Thanks to Lars Keuter for implementing this)
 5) Can now incorporate physio (retroicor type) correction with the TAPAS toolbox (Thanks to Leo Asan for implementing this)
     
 
-# Pipeline for physio regressor creation 
+## Pipeline for physio regressor creation 
 
 
 IMPORTANT: 
@@ -92,4 +104,19 @@ IMPORTANT:
     you need to do this only once. It will be set up for good in your spm12 after
 
 
-	
+## PPI Analysis
+
+Psychophysiological interaction (PPI) analysis examines how functional connectivity between brain regions changes depending on psychological context.
+
+### Requirements and Setup
+
+- Every PPI analysis requires a base first-level model defined in `get_study_specs.m`. When first running the PPI analysis, this base model will be estimated. For subsequent PPIs using the same base model, it won't be estimated again.
+  - Multiple PPIs (using different ROIs or conditions) can be run sequentially by defining multiple elements in the analysis struct array. These PPIs will use the same base model
+  - **Important**: If some subjects don't have the base model yet, you must first estimate the base analysis for these subjects before running the PPI
+
+- PPI Configuration: PPI settings (ROI definition, condition selection etc.) are defined in `get_study_specs.m`
+
+### Best practise
+
+- Verify that condition indices in your PPI specification reference valid conditions in your base model
+- For two-pass ROI optimization, make sure the contrast vector matches your model dimensions

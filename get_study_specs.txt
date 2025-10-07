@@ -1,8 +1,8 @@
 function [path,vars,analysis,import,qc] = get_study_specs
 
     %% path definitions
-    path.baseDir     = '/home/keuter/projects/painact/data/bids';
-    path.templateDir = '/home/keuter/scripts/spm_bids_pipeline/templates/';
+    path.baseDir     = '/path/to/data';
+    path.templateDir = '/path/to/spm_bids_pipeline/pipeline';
     path.derivDir        = fullfile(path.baseDir, 'derivatives');
     path.preprocDir      = fullfile(path.baseDir, 'derivatives', 'spm_preprocessing');
     path.firstlevelDir   = fullfile(path.baseDir, 'derivatives', 'spm_firstlevel');
@@ -13,8 +13,8 @@ function [path,vars,analysis,import,qc] = get_study_specs
     vars.parallel    = 1;  % parallel processing?
     
     %% Import related stuff
-    import.prisma        = '/home/keuter/projects/painact/data/bids/participants.tsv';
-    import.user          = 'keuter';
+    import.prisma        = '/path/to/data/participants.tsv';
+    import.user          = '';  
     import.server        = 'revelations.nin.uke.uni-hamburg.de';
     
     hh = 1;
@@ -60,7 +60,7 @@ function [path,vars,analysis,import,qc] = get_study_specs
     
     %% General settings
     
-    vars.task        = 'painact';
+    vars.task        = 'task';
     vars.nRuns       = 6; %
     vars.nSess       = 1;
     
@@ -93,15 +93,73 @@ function [path,vars,analysis,import,qc] = get_study_specs
     
     
     %% Analysis settings
-    % the next section can be used to define different groups for 2nd level analysis
-    % We first define base settings that are typically used across analyses
-    % These can be overwritten below for specific analyses
+
+    % OVERVIEW:
+    % - Each analysis (element of the 'analysis' struct array) starts with 
+    %   the settings defined in analysis_template (common parameters across
+    %   analyses)
+    % - Individual analyses can override specific settings as needed
+    % - Modify values here to affect all analyses at once
+
+    % USAGE:
+    % 1. Modify these template settings to affect ALL analyses
+    % 2. In each analysis section, use: analysis(idx) = analysis_template;
+    % 3. Then customize specific parameters for that analysis
+
+
+    % General analysis settings
+    analysis_template = struct();
+
+    % Subject selection
+    analysis_template.all_subs = 1:58;
+    excluded_subs = [16, 43, 45, 53, 56];
+    analysis_template.all_subs(ismember(analysis_template.all_subs, excluded_subs)) = [];
+    
+    % Specific exclusions
+    analysis_template.exclude(1) = struct('sub', 48, 'ses', 1, 'run', [6]);
+    
+    % Group settings (2nd level)
+    single_group = ones(size(analysis_template.all_subs));
+    analysis_template.group_ind = single_group;
+    analysis_template.group_weights = [1];
+    analysis_template.group_ana_names = {'All'};
+    
+
+    % Model settings
+    analysis_template.noise_corr = 'mov24_wm_csf_roi_physio';
+    analysis_template.cvi = 'none';
+    analysis_template.shift = 0;
+    analysis_template.skernel = 6;
+    analysis_template.hpf = 120;
+    analysis_template.bs = 0;
+    analysis_template.use_vasa = 0;
+    
+    % Session settings
+    analysis_template.sess = [1];
+    analysis_template.prune = 1;
+    
+    % First level settings
+    analysis_template.do_model = 0;
+    analysis_template.do_est = 0;
+    analysis_template.do_vasa = 0;
+    analysis_template.do_cons = 0;
+    analysis_template.do_correct_vasa = 0;
+    analysis_template.do_warp = 0;
+    analysis_template.do_smooth = 0;
+    
+    % Second level settings
+    analysis_template.fact_dept = 1;
+    analysis_template.fact_var = 1;
+    analysis_template.do_fact = 1;
+    analysis_template.do_fact_con = 1;
+
+    analysis_template.do_one_t = 0;
+
 
     %whatto do
     do_hrf       = 0;
     do_hrf_param = 0;
-    do_fir_cue   = 0;
-    do_fir_stim  = 0;
+    do_fir       = 0;
     do_ppi       = 1;
     do_lsa       = 0;
 
@@ -110,13 +168,8 @@ function [path,vars,analysis,import,qc] = get_study_specs
     if do_hrf    
 
         idx = idx + 1;
-        
-        
-        analysis(idx) = get_analysis_defaults();
+        analysis(idx) = analysis_template;
 
-
-        
-    
         analysis(idx).concatenate       = 1; % concatenate or not ?
         analysis(idx).ana               = 2; % hrf
         analysis(idx).n_base            = 1;
@@ -127,14 +180,12 @@ function [path,vars,analysis,import,qc] = get_study_specs
 
         [analysis(idx).t_con, analysis(idx).t_con_names] = get_hrf_cons_cond;
 
-    
     end
     
     if do_hrf_param
 
         idx = idx + 1;
-        analysis(idx) = get_analysis_defaults();
-
+        analysis(idx) = analysis_template;
 
         analysis(idx).concatenate       = 1; % concatenate or not ?
         analysis(idx).ana               = 2; % hrf
@@ -143,7 +194,7 @@ function [path,vars,analysis,import,qc] = get_study_specs
         analysis(idx).events            = '_param'; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_events_param.tsv
         analysis(idx).cond_names        = {'vis'        ,'mix'  ,'pain'}; % three conditions
         analysis(idx).p_mod             = {{'p_vistype'},{}     ,{'p_painint'}}; % vis and pain have 1 or 2 parametric modulators
-        %analysis(idx).p_mod             = {{}           ,{}     ,{}}; 
+        %analysis(idx).p_mod            = cell(1, numel(ppi_base_settings.cond_names)); 
 
 
         [analysis(idx).t_con, analysis(idx).t_con_names] = get_hrf_cons_param;
@@ -152,9 +203,10 @@ function [path,vars,analysis,import,qc] = get_study_specs
 
     end
 
-    if do_fir_cue
+    if do_fir
+
         idx = idx + 1;
-        analysis(idx) = get_analysis_defaults();
+        analysis(idx) = analysis_template;
 
         analysis(idx).max_procs         = 12; % large DesMtx
         analysis(idx).concatenate       = 1;
@@ -163,40 +215,21 @@ function [path,vars,analysis,import,qc] = get_study_specs
         analysis(idx).ana               = 1; % fir
         analysis(idx).n_base            = 8;
         analysis(idx).bin_size          = 2; % in seconds
-        analysis(idx).name_ana          = 'painact_fir_cue';
+        analysis(idx).name_ana          = 'fir_test';
         analysis(idx).events            = ''; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_bold_param.tsv
-        analysis(idx).cond_names        = {'CUE_Pain-Move_L', 'CUE_Pain-noMove_L', 'CUE_noPain-Move_L', 'CUE_noPain-noMove_L', ...
-                                           'CUE_Pain-Move_R', 'CUE_Pain-noMove_R', 'CUE_noPain-Move_R', 'CUE_noPain-noMove_R'}; % only cue
-        analysis(idx).p_mod             = cell(1, numel(analysis.cond_names));
+        analysis(idx).cond_names        = {'CUE_CondA_L', 'CUE_CondB_L', 'CUE_CondC_L', 'CUE_CondD_L', ...
+                                           'CUE_CondA_R', 'CUE_CondB_R', 'CUE_CondC_R', 'CUE_CondD_R'};
+        analysis(idx).p_mod             = cell(1, numel(analysis(idx).cond_names));
 
-        [analysis(idx).f_con, analysis(idx).f_con_names] = get_F_contrasts_fir_painact(analysis.cond_names);
-    end
-    
-    if do_fir_stim
-
-        idx = idx + 1;
-        analysis(idx) = get_analysis_defaults();
-
-        analysis(idx).max_procs         = 12; % large DesMtx
-        analysis(idx).concatenate       = 1;
-        analysis(idx).t_con             = [];
-        analysis(idx).t_con_names       = [];
-        analysis(idx).ana               = 1; % fir
-        analysis(idx).n_base            = 8;
-        analysis(idx).bin_size          = 2; % in seconds
-        analysis(idx).name_ana          = 'painact_fir_stim';
-        analysis(idx).events            = ''; % this refers to the tsv file: e.g. sub-08_ses-01_task-lcpa_run-01_bold_param.tsv
-        analysis(idx).cond_names        = {'STM_Pain-Move_L', 'STM_Pain-noMove_L', 'STM_noPain-Move_L', 'STM_noPain-noMove_L', ...
-                                           'STM_Pain-Move_R', 'STM_Pain-noMove_R', 'STM_noPain-Move_R', 'STM_noPain-noMove_R'}; % only stim
-        analysis(idx).p_mod             = cell(1, numel(analysis.cond_names));
-       
-        [analysis(idx).f_con, analysis(idx).f_con_names] = get_F_contrasts_fir_painact(analysis.cond_names);
+        [analysis(idx).f_con, analysis(idx).f_con_names] = get_F_contrasts_fir(analysis(idx).cond_names);
     end
 
 
     if do_lsa
 
         idx = idx + 1;
+        analysis(idx) = analysis_template;
+
         
         analysis(idx).concatenate       = 1;
         analysis(idx).t_con             = [];
@@ -207,7 +240,7 @@ function [path,vars,analysis,import,qc] = get_study_specs
         analysis(idx).name_ana          = 'lcpa_lsa';
         analysis(idx).events            = '_lsa'; % this refers to the tsv file: e.g. *_lsa.tsv
         analysis(idx).cond_names        = {'face'        ,'house'  ,'mix'};
-        analysis(idx).p_mod             = {{}            ,{}       ,{}   };
+        analysis(idx).p_mod             = cell(1, numel(analysis(idx).cond_names));
     
     end
 
@@ -217,18 +250,18 @@ function [path,vars,analysis,import,qc] = get_study_specs
         ppi_specs = get_ppi_specs();
         
         % Store base model settings for PPI
-        ppi_base_settings             = get_analysis_defaults();
+        ppi_base_settings             = analysis_template;
         ppi_base_settings.do_ppi      = 1;
         ppi_base_settings.concatenate = 1;
         ppi_base_settings.ana         = 2; % hrf
-        ppi_base_settings.name_ana    = 'painact_ppi';
+        ppi_base_settings.name_ana    = 'ppi_test';
         ppi_base_settings.n_base      = 1;
         ppi_base_settings.events      =   '';
-        ppi_base_settings.cond_names  = {'CUE_Pain-Move_L', 'CUE_Pain-noMove_L', 'CUE_noPain-Move_L', 'CUE_noPain-noMove_L', ...
-                                        'STM_Pain-Move_L', 'STM_Pain-noMove_L', 'STM_noPain-Move_L', 'STM_noPain-noMove_L', ... 
-                                        'CUE_Pain-Move_R', 'CUE_Pain-noMove_R', 'CUE_noPain-Move_R', 'CUE_noPain-noMove_R', ...
-                                        'STM_Pain-Move_R', 'STM_Pain-noMove_R', 'STM_noPain-Move_R', 'STM_noPain-noMove_R', ...  
-                                        'CUE_Rating', 'STM_Rating', 'Rating', 'CUE_invalid', 'STM_invalid'};
+        ppi_base_settings.cond_names  = {'CUE_CondA_L', 'CUE_CondB_L', 'CUE_CondC_L', 'CUE_CondD_L', ...
+                                        'STM_CondA_L', 'STM_CondB_L', 'STM_CondC_L', 'STM_CondD_L', ... 
+                                        'CUE_CondA_R', 'CUE_CondB_R', 'CUE_CondC_R', 'CUE_CondD_R', ...
+                                        'STM_CondA_R', 'STM_CondB_R', 'STM_CondC_R', 'STM_CondD_R', ...  
+                                        'Rating1', 'Rating2', 'Rating3', 'Invalid1', 'Invalid2'};
         ppi_base_settings.p_mod       = cell(1, numel(ppi_base_settings.cond_names));
         
         % PPI specific contrasts
@@ -240,7 +273,7 @@ function [path,vars,analysis,import,qc] = get_study_specs
         ppi_base_settings.t_con       = [0 0 0 0 0 1 1 -1 -1;
                                          0 0 0 0 0 1 -1 1 -1;
                                          0 0 0 0 0 -1 1 -1 1];
-        ppi_base_settings.t_con_names = {'ppi_pain>nopain', 'ppi_move>nomove', 'ppi_move<nomove'};
+        ppi_base_settings.t_con_names = {'ppi_condA>condC', 'ppi_condB>condD', 'ppi_condB<condD'};
        
 
         % create the final analysis struct
@@ -261,58 +294,6 @@ function [path,vars,analysis,import,qc] = get_study_specs
 
 end
 
-function defaults = get_analysis_defaults()
-    
-    % Returns a struct containing all default analysis settings
-    % these parameters tend to be the same across analyses.
-    % They can be overwritten by modifying the struct fields after calling this function.
-
-    defaults = struct();
-    
-    % Subject selection
-    defaults.all_subs = 1:58;
-    excluded_subs = [16, 43, 45, 53, 56];
-    defaults.all_subs(ismember(defaults.all_subs, excluded_subs)) = [];
-    
-    % Group settings
-    single_group = ones(size(defaults.all_subs));
-    defaults.group_ind = single_group;
-    defaults.group_weights = [1];
-    defaults.group_ana_names = {'All'};
-    
-    % Specific exclusions
-    defaults.exclude(1) = struct('sub', 48, 'ses', 1, 'run', [6]);
-    
-    % Model settings
-    defaults.noise_corr = 'mov24_wm_csf_roi_physio';
-    defaults.cvi = 'none';
-    defaults.shift = 0;
-    defaults.skernel = 6;
-    defaults.hpf = 120;
-    defaults.bs = 0;
-    defaults.use_vasa = 0;
-    
-    % Session settings
-    defaults.sess = [1];
-    defaults.prune = 1;
-    
-    % First level settings
-    defaults.do_model = 1;
-    defaults.do_est = 1;
-    defaults.do_vasa = 0;
-    defaults.do_cons = 1;
-    defaults.do_correct_vasa = 0;
-    defaults.do_warp = 1;
-    defaults.do_smooth = 1;
-    
-    % Second level settings
-    defaults.fact_dept = 0;
-    defaults.fact_var = 0;
-    defaults.do_fact = 0;
-    defaults.do_fact_con = 0;
-
-    defaults.do_one_t = 0;
-end
 
 function ppi_specs = get_ppi_specs()
     % Define all PPI specifications
@@ -354,13 +335,13 @@ function ppi_specs = get_ppi_specs()
             'deconvolute', true,        ...                                     
             'tcon',        struct(...
                 'vec',     [0 0 0 0 1 1 -1 -1 0 0 0 0 0 0 0 0 0 0 0 0 0], ...
-                'name',    'STM_L_Pain>Nopain' ...
+                'name',    'STM_L_CondA>CondC' ...
             ));
     
     % Second PPI: cerebellum
     ppi_specs(2) = struct( ...
             'def',         'mask',    ...   
-            'spec',        '/home/keuter/projects/painact/masks/mask.nii', ...   
+            'spec',        '/path/to/mask.nii', ...   
             'xyz',         NaN, ...
             'str',         'cerebellum', ...   
             'name',        'cerebellum', ...       
@@ -369,7 +350,7 @@ function ppi_specs = get_ppi_specs()
             'deconvolute', true,        ...                                     
             'tcon',        struct(...
                 'vec',     [0 0 0 0 1 1 -1 -1 0 0 0 0 0 0 0 0 0 0 0 0 0], ...
-                'name',    'STM_L_Pain>Nopain' ...
+                'name',    'STM_L_CondA>CondC' ...
             ));
 end
 
