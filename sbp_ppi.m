@@ -62,7 +62,12 @@ function sbp_ppi(SPM, ppi_specs, epi_2_templ, wm_file)
     % Extract normalized regressors
     for i = 1:n_ppis
         psy_regressors(:,i) = normit(ppi.xY.PPI{i}.P);
-        ppi_regressors(:,i) = normit(ppi.xY.PPI{i}.o_ppi);
+        
+        if deconvolute
+            ppi_regressors(:,i) = normit(ppi.xY.PPI{i}.ppi);
+        else
+            ppi_regressors(:,i) = normit(ppi.xY.PPI{i}.o_ppi);
+        end
     end
     
     % create final design matrix
