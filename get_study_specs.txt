@@ -18,7 +18,7 @@ function [path,vars,analysis,import,qc] = get_study_specs
     import.server        = 'revelations.nin.uke.uni-hamburg.de';
     
     hh = 1;
-    import.data(hh).enddir        = 'func';
+    import.data(hh).dir        = 'func';
     import.data(hh).type       = 'bold';
     import.data(hh).seq        = 'ninEPI_bold_v12C, fmri '; %protocol name (trailing space makes it unique)
     import.data(hh).cond       = 'n > 180'; % heuristic to get only valid runs (e.g. more than 1000 volumes)
