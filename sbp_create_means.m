@@ -13,6 +13,8 @@ if n_subs < 2
 end
 all_wskull_files = [];
 all_wmean_files  = [];
+all_wc1_files    = [];
+
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     
@@ -26,36 +28,54 @@ for sub = 1:n_subs
     
     wskull_file     = fullfile(anat_dir, 'wskull-strip-T1.nii');
     wmean_file      = spm_file(epi,'prefix','wmeana');
-
+    wc1_file        = fullfile(anat_dir,sprintf('wc1sub-%02d_T1w.nii',sub_id));
+    
     all_wskull_files  = [all_wskull_files;wskull_file];
     all_wmean_files   = [all_wmean_files;wmean_file];
+    all_wc1_files     = [all_wc1_files;wc1_file];
     
 end
-matlabbatch{1}.spm.util.imcalc.input = all_wskull_files;
-matlabbatch{1}.spm.util.imcalc.output = 'mean_wskull';
-matlabbatch{1}.spm.util.imcalc.outdir = cellstr(path.preprocDir);
-matlabbatch{1}.spm.util.imcalc.expression = 'mean(X)';
-matlabbatch{1}.spm.util.imcalc.var = struct('name', {}, 'value', {});
-matlabbatch{1}.spm.util.imcalc.options.dmtx = 1;
-matlabbatch{1}.spm.util.imcalc.options.mask = 0;
-matlabbatch{1}.spm.util.imcalc.options.interp = 1;
-matlabbatch{1}.spm.util.imcalc.options.dtype = 4;
+mbr = 1;
+matlabbatch{mbr}.spm.util.imcalc.input = all_wskull_files;
+matlabbatch{mbr}.spm.util.imcalc.output = 'mean_wskull';
+matlabbatch{mbr}.spm.util.imcalc.outdir = cellstr(path.preprocDir);
+matlabbatch{mbr}.spm.util.imcalc.expression = 'mean(X)';
+matlabbatch{mbr}.spm.util.imcalc.var = struct('name', {}, 'value', {});
+matlabbatch{mbr}.spm.util.imcalc.options.dmtx = 1;
+matlabbatch{mbr}.spm.util.imcalc.options.mask = 0;
+matlabbatch{mbr}.spm.util.imcalc.options.interp = 1;
+matlabbatch{mbr}.spm.util.imcalc.options.dtype = 4;
+mbr = mbr+1;
 
-matlabbatch{2} = matlabbatch{1};
-matlabbatch{2}.spm.util.imcalc.input = all_wmean_files;
-matlabbatch{2}.spm.util.imcalc.output = 'mean_wmean';
-matlabbatch{2}.spm.util.imcalc.expression = 'mean(X)';
+matlabbatch{mbr} = matlabbatch{1};
+matlabbatch{mbr}.spm.util.imcalc.input = all_wmean_files;
+matlabbatch{mbr}.spm.util.imcalc.output = 'mean_wmean';
+matlabbatch{mbr}.spm.util.imcalc.expression = 'mean(X)';
+mbr = mbr+1;
 
+matlabbatch{mbr} = matlabbatch{1};
+matlabbatch{mbr}.spm.util.imcalc.input = all_wc1_files;
+matlabbatch{mbr}.spm.util.imcalc.output = 'mean_wc1';
+matlabbatch{mbr}.spm.util.imcalc.expression = 'mean(X)';
+mbr = mbr+1;
 
-matlabbatch{3} = matlabbatch{1};
-matlabbatch{3}.spm.util.imcalc.input = all_wskull_files;
-matlabbatch{3}.spm.util.imcalc.output = 'var_wskull';
-matlabbatch{3}.spm.util.imcalc.expression = 'var(X)';
+matlabbatch{mbr} = matlabbatch{1};
+matlabbatch{mbr}.spm.util.imcalc.input = all_wskull_files;
+matlabbatch{mbr}.spm.util.imcalc.output = 'var_wskull';
+matlabbatch{mbr}.spm.util.imcalc.expression = 'var(X)';
+mbr = mbr+1;
 
-matlabbatch{4} = matlabbatch{1};
-matlabbatch{4}.spm.util.imcalc.input = all_wmean_files;
-matlabbatch{4}.spm.util.imcalc.output = 'var_wmean';
-matlabbatch{4}.spm.util.imcalc.expression = 'var(X)';
+matlabbatch{mbr} = matlabbatch{1};
+matlabbatch{mbr}.spm.util.imcalc.input = all_wmean_files;
+matlabbatch{mbr}.spm.util.imcalc.output = 'var_wmean';
+matlabbatch{mbr}.spm.util.imcalc.expression = 'var(X)';
+mbr = mbr+1;
+
+matlabbatch{mbr} = matlabbatch{1};
+matlabbatch{mbr}.spm.util.imcalc.input = all_wc1_files;
+matlabbatch{mbr}.spm.util.imcalc.output = 'var_wc1';
+matlabbatch{mbr}.spm.util.imcalc.expression = 'var(X)';
+mbr = mbr+1;
 
 spm_jobman('run',matlabbatch);
 

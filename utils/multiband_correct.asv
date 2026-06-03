@@ -1,0 +1,100 @@
+function  multiband_correct(V,so)
+% routine to correct intensity differences across multiband acquisitions
+% V is either an array of mapped volumes (spm_vol) or a string (then all
+% volumes are used)
+% so is a vector of acquistion times (as used in slice timing correction) this makes it easy to find the edges 
+
+if ischar(V) %we need to perform spm_vol and get all frames
+    [p,n,e]=fileparts(V);
+    fnames = spm_select('ExtFPListRec',p,['^' n e '$'] ,Inf);
+    V = spm_vol(fnames);
+end
+
+edge = [find(so == max(unique(so)))-1 numel(so)]; %simple way to find the edges (start with 0 end with last slice)
+
+% use spm to read data
+data      = single(spm_read_vols(V));
+mean_data = mean(data,4); % mean across all volumes
+overall_mean = mean(mean_data(:)); 
+
+vec_data = mean_data(:); % vectorized mean
+
+%gm = fitgmdist(vec_data, 2, 'RegularizationValue', 1e-6, 'Replicates', 5); % fit Gaussian mixture model to get rid of background noise
+%[~, brain]  = max(gm.mu); % use the bigger mean
+%brain_mean  = gm.mu(brain);
+%brain_sigma = sqrt(gm.Sigma(:,:,brain)); % for diagonal covariance
+
+masked_data = mean_data;
+masked_data(mean_data<(0.8*overall_mean)) = NaN;
+%masked_data(mean_data<(brain_mean-brain_sigma))  = NaN;
+
+range = 4; % slices before and after the seam
+
+% shape of intensity profile across slices
+for g=2:numel(edge)-1
+    collapsed = nanmedian(reshape(masked_data, [], size(masked_data,3))); %use median to be more robust
+    figure(101);plot(collapsed); % there should be a kink at the band borders
+    % now fit a 2nd order polynomial with a shift parameter
+     
+    y        = collapsed(edge(g)-range:edge(g)+range+1)';
+    x        = zscore(1:size(y,1))';
+    step     = [zeros(range+1,1); ones(range+1,1)];
+    desmtx   = [ones(size(y,1),1), x, x.^2,  step];
+    beta     = desmtx \ y;
+    y_fitted = desmtx*beta;
+    scaling_fit  = y_fitted(range+1)./y_fitted(range+2);
+    scaling  = y(range+1)./y(range+2);
+        
+    figure(102);
+    plot(y);hold on;plot(desmtx*beta);
+    data(:,:,edge(g)+1:edge(g+1),:)        = data(:,:,edge(g)+1:edge(g+1),:) .*scaling;
+    masked_data(:,:,edge(g)+1:edge(g+1),:) = masked_data(:,:,edge(g)+1:edge(g+1),:) .*scaling;
+    
+end
+%now use SPM to write files
+Vout   = V;
+%Vout32 = V;
+
+prefix = 'mb_';
+
+dt   = spm_type('uint16'); % we use uint16
+
+dmx  = spm_type(dt,'maxval');
+dmn  = spm_type(dt,'minval');
+
+%-Scale to min/max of overall data
+%----------------------------------------------------------------------
+mx      = -Inf;
+mn      = Inf;
+for i=1:numel(V)
+    dat = data(:,:,:,i);
+    dat = dat(isfinite(dat));
+    mx  = max(mx,max(dat(:)));
+    mn  = min(mn,min(dat(:)));
+end
+
+if isempty(mx), mx = 0; end
+if isempty(mn), mn = 0; end
+
+if mx~=mn
+    if dmn < 0
+        sf = max(mx/dmx,-mn/dmn);
+    else
+        sf = mx/dmx;
+    end
+    off    = 0;
+else
+    sf     = mx/dmx;
+    off    = 0;
+end
+
+
+
+for vo = 1:size(data,4)
+    Vout(vo).fname = spm_file(Vout(vo).fname,'prefix',prefix);
+    Vout(vo).pinfo(1) = sf;
+    Vout(vo).pinfo(2) = 0;
+    Vout(vo).dt(1)    = 512;
+    spm_write_vol(Vout(vo),data(:,:,:,vo));
+end
+

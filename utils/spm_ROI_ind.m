@@ -162,8 +162,10 @@ switch lower(xY.def)
         error('Not implemented.');
     else
         XYZ = xY.spec.mat \ [XYZmm; Q];
-        if isfield(xY,'ind') % added by CB to specify which intensity is used
+        if isfield(xY,'ind') % added by CB to specify which intensity is used (ie atlas)
             j   = find(spm_sample_vol(xY.spec, XYZ(1,:), XYZ(2,:), XYZ(3,:),0) == xY.ind);
+        elseif isfield(xY,'thr')  % added by CB to specify which threshold is used
+            j   = find(spm_sample_vol(xY.spec, XYZ(1,:), XYZ(2,:), XYZ(3,:),0) >= xY.thr);
         else
             j   = find(spm_sample_vol(xY.spec, XYZ(1,:), XYZ(2,:), XYZ(3,:),0) > 0);
         end
