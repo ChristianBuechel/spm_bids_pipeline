@@ -1,4 +1,4 @@
-function  NIFTI_NORDIC(fn_magn_in,fn_phase_in,fn_out,ARG)
+function  NIFTI_NORDIC_ole(fn_magn_in,fn_phase_in,fn_out,ARG)
 % fMRI
 %  fn_magn_in='name.nii.gz';
 %  fn_phase_in='name2.nii.gz';
@@ -902,6 +902,7 @@ end
 
 %   for n2=1:size(KSP2a,2)-w2+1;
 %        for n3=1:size(KSP2a,3)-w3+1;
+
 for n2=[1: max(1,floor(w2/ARG.patch_average_sub)):size(KSP2a,2)*1-w2+1  size(KSP2a,2)-w2+1];
     for n3=[1: max(1,floor(w3/ARG.patch_average_sub)):size(KSP2a,3)*1-w3+1  size(KSP2a,3)-w3+1  ];
         
@@ -1016,7 +1017,6 @@ end
 
 KSP2_tmp_update=0*KSP2a;
 %NOISE=[];
-
 
 for n2=[1: max(1,floor(w2/ARG.patch_average_sub)):size(KSP2a,2)*1-w2+1  size(KSP2a,2)-w2+1];
     for n3=[1: max(1,floor(w3/ARG.patch_average_sub)):size(KSP2a,3)*1-w3+1  size(KSP2a,3)-w3+1  ];
