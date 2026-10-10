@@ -1,6 +1,10 @@
 SPM based data import, preprocessing and analyses for data in BIDS format.  
 Includes a function to download the data from the ISN DICOM data base to the project directory  
 
+> **A major revision (Version 3) is in preparation on the branch `v3-overhaul`.**  
+> It is not finished yet (the analysis module `sbp_analyses.m` still has to be refactored) and it is **not compatible** with this version (file names, `get_study_specs.m`).  
+> Please keep using this branch (`main`, tag `Version-2.1`) until Version 3 has been merged.  
+
 THIS IS A MAJOR REVISION, it is very likely that you have adapt your scripts if you have used a previous version
 
 ## Organisation  
