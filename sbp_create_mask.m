@@ -1,11 +1,19 @@
-function create_mask(all_sub_ids)
-% function create_mask
-% creates a mask based on WM and GM from the T1 (brainmaks.nii)
-% This mask is then warped into EPI space (rbrainmass.nii) and 
-% smoothed (s3rbrainmask) to be used as a mask for 1st level GLMs
+function sbp_create_mask(all_sub_ids)
+% function sbp_create_mask(all_sub_ids)
+% creates a brain mask based on GM and WM of the T1w (c1 + c2, vars.T1maskID, e.g. brain_mask.nii,
+% in the anat folder). This mask is then pushed into EPI space with the deformation of the
+% nonlinear coregistration (y_epi_2_T1.nii, sbp_create_trans) and written to the func folder
+% as r<mask> (rbrain_mask.nii), smoothed (s3r<mask>) and binarised (bins3r<mask>), to be used
+% as a mask for the 1st level GLMs. The skull-stripped T1 (vars.skullStripID) and the plain
+% T1w are also pushed into EPI space (r<name>, anat folder), for checking.
+% Needs c1<T1w>, c2<T1w> (T1 segmentation), the skull-stripped T1 (sbp_skullstrip) and y_epi_2_T1.nii.
+%   all_sub_ids   subject numbers, e.g. 1:5 (run in parallel if vars.parallel = 1)
 
 % add paths
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 
@@ -18,12 +26,10 @@ skern       = 3; % smoothing the final mask in epi space
 for sub = 1:n_subs
     sub_id    = all_sub_ids(sub);
     
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); % if there are more than 1
+    struc_file = get_anat(BIDS,sub_id);
     anat_dir   = spm_file(struc_file,'path');
 
-    epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        =  epi(1); % if there are brain and spinal, just take brain
+    epi        = get_ref_epi(BIDS,sub_id);
     func_dir   = spm_file(epi,'path');
   
     c1_file     = spm_file(struc_file,'prefix','c1');    
@@ -44,7 +50,8 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fnames = fullfile(anat_dir, mask_name);
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.weight = {''};
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.savedir.saveusr = func_dir;
-    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [-100 -150 -100;100 150 100]; % same as nlin_coreg
+    %matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [-100 -150 -100;100 150 100]; % same as nlin_coreg
+    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [NaN NaN NaN;NaN NaN NaN]; % same as nlin_coreg
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.vox = [NaN NaN NaN];
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.preserve = 2; %option for labels, does a perfect job for binary image
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fwhm = [0 0 0];
@@ -52,11 +59,12 @@ for sub = 1:n_subs
     gi = gi + 1;
     
     matlabbatch{gi,sub}.spm.util.defs.comp{1}.def = fullfile(func_dir, 'y_epi_2_T1.nii');
-    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fnames = fullfile(anat_dir, vars.skullStripID); %also create a skullstrip in EPI space
+    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fnames = {char(fullfile(anat_dir, vars.skullStripID));char(struc_file)}; %also create a skullstrip and plain T1w in EPI space
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.weight = {''};
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.savedir.saveusr = anat_dir;
-    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [-100 -150 -100;100 150 100]; % same as nlin coreg
-    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.vox = [NaN NaN NaN];
+    %matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [-100 -150 -100;100 150 100]; % same as nlin coreg
+    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.bb = [NaN NaN NaN;NaN NaN NaN]; % same as nlin coreg
+    matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fov.bbvox.vox = [1 1 1];
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.preserve = 0; % simple
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.fwhm = [0 0 0];
     matlabbatch{gi,sub}.spm.util.defs.out{1}.push.prefix = r_pref;

@@ -1,23 +1,42 @@
-function realign_1_2(all_sub_ids)
+function realign_1_2(all_sub_ids,runs)
 % function realign_1_2(all_sub_ids)
 % realign epi images (first pass)
 % This is part 1 of 2 here we simply create a mean EPI for all the upcoming
 % spatial things, but also update the .mat info
 % Part 2 will then use a brain mask to get rid of the eyes
+%
+% The images realigned are the output of the steps before (vars.preproc.steps, see
+% epi_prefix: P<name>.nii, e.g. an<name>.nii for NORDIC + slice timing). All runs and
+% sessions of a subject are realigned together to the first image. The mean image
+% (mean<P><name>.nii, of ses-01 run-01) and the realignment parameters (rp_<P><name>.txt)
+% get this prefix too, all later steps find them with epi_file.
 
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+if nargin < 2
+    runs = []; % all existing runs
+end
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     cnt        = 1;
+    all_niftis = {}; % reset: subjects can have different numbers of runs
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi                =  epi(1); % if there are brain and spinal, just take brain
-            run_niftis         =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^a'),Inf);
-            all_niftis{cnt,1}  =  cellstr(run_niftis);
+        if isempty(runs)
+            ses_runs = get_run_numbers(BIDS,sub_id,ses);
+        else
+            ses_runs = runs;
+        end
+        for run = ses_runs
+            epi               =  get_func_files(BIDS,sub_id,ses,run);
+            if cnt == 1 && ~strcmp(char(epi),char(get_ref_epi(BIDS,sub_id)))
+                % SPM names the mean after the FIRST image, the later steps expect it for ses-01 run-01
+                error('sub-%02d: the first run to realign (ses-%02d run-%02d) is not ses-01 run-01, but the later steps look for the mean image of ses-01 run-01.',sub_id,ses,run);
+            end
+            all_niftis{cnt,1}  =  cellstr(epi_frames(epi,vars,'in')); %#ok<AGROW> % frames of P<name>
             cnt                =  cnt + 1;
         end
     end

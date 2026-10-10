@@ -2,8 +2,13 @@ function apply_vdm(all_sub_ids)
 % function realign(all_sub_ids)
 % realign and reslice epi images
 % This is part 2 of 2 here we take a brain mask and actually reslice all images
+% Applies the vdm (vdm5_<P><epi>) and the realignment to the P<epi> images (P: see epi_prefix)
+% and writes the resliced images r<P><epi> (fixed prefix r, used by sbp_create_noise and the analysis)
 
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 
@@ -13,12 +18,14 @@ for sub = 1:n_subs
     gi  = 1;
     cnt = 1;
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi                =  epi(1); % if there are brain and spinal, just take brain
-            run_niftis         =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^a'),Inf);
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi                =  get_func_files(BIDS,sub_id,ses,run);
+            run_niftis         =  epi_frames(epi,vars,'in'); % frames of P<epi>
             matlabbatch{gi,sub}.spm.tools.fieldmap.applyvdm.data(cnt).scans   = cellstr(run_niftis);
-            vdm_file = spm_file(epi,'prefix','vdm5_a');
+            vdm_file = epi_file(epi,vars,'vdm'); % vdm5_<P><epi>
+            if ~isfile(char(vdm_file))
+                error('sub-%02d ses-%02d run-%02d: vdm not found (%s), was sbp_create_vdm_fmap run?',sub_id,ses,run,char(vdm_file));
+            end
             matlabbatch{gi,sub}.spm.tools.fieldmap.applyvdm.data(cnt).vdmfile = cellstr(vdm_file);
             cnt                =  cnt + 1;
         end

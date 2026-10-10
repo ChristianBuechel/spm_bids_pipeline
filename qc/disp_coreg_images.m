@@ -9,13 +9,11 @@ nSubs               = length(subIDs);
 BIDS                = spm_BIDS(preprocPath);
 
 for sub = 1:nSubs
-    anatFile  = spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'type','T1w');
-    anatFile  = char(anatFile(1)); %in case there are more sessions with T1w
+    anatFile  = char(get_anat(BIDS,subIDs(sub)));
     anatDir   = spm_file(anatFile,'path');
     skullFile = fullfile(anatDir,vars.skullStripID);
     
-    epi         = spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi         = epi(1); % if there are brain and spinal, just take brain
+    epi         = get_ref_epi(BIDS,subIDs(sub));
     meanFile    = char(spm_file(epi,'prefix','cmeana'));
     
     dispImages = char(skullFile,meanFile);

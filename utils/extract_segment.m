@@ -1,6 +1,12 @@
-function extract_segment(epi_files, wmean_file, back_file, c_files, interaction, thresh, ex_var, fname)
+function segment = extract_segment(epi_files, wmean_file, back_file, c_files, interaction, thresh, ex_var, fname, smooth_fwhm, n_erode)
 % Identifies voxels in segments (e.g. c2 and c3 (WM CSF) partitions) above
-% thresh (and eroded once)
+% thresh (and eroded n_erode times, default once)
+% smooth_fwhm (optional, default 0): FWHM [mm] of a Gaussian smoothing of the EPI time series (in memory,
+% spm_smoothto16bit_us) before the voxels are read. In unsmoothed high resolution data the voxel variance is
+% dominated by independent noise, smoothing makes the shared (physiological) fluctuations easier to see.
+% The smoothing is not restricted to the segment, so use enough erosion (n_erode) to keep GM signal out.
+% fname: prefix of the .mat file with the result (in the folder of the EPIs); [] = do not save
+% segment (optional output): the struct that is saved (segment(i).data, .name)
 % c_files is a cellstr
 % epi_files is a char array
 % interaction n x 2 specifies if one also wants the joint prob of the segments (ie c2.*c3)
@@ -18,9 +24,14 @@ function extract_segment(epi_files, wmean_file, back_file, c_files, interaction,
 
 %__________________________________________________________________________
 %
+if nargin < 9 || isempty(smooth_fwhm), smooth_fwhm = 0; end
+if nargin < 10 || isempty(n_erode),    n_erode    = 1; end
 n_rois = numel(c_files);
 [epi_dir,~,~]    = fileparts(epi_files(1,:));
 V_epi            = spm_vol(epi_files);
+if smooth_fwhm > 0
+    V_epi = spm_smoothto16bit_us(V_epi,smooth_fwhm); % smoothed data are kept in V_epi.dat, all later reads use them
+end
 V_wmean_scan     = spm_vol(wmean_file);
 N_back_scan      = nifti(back_file);
 
@@ -35,7 +46,9 @@ for i=1:n_rois
     
     data{i}    = spm_read_vols(V_part); % make data available in RAM for spm_erode
     V_part.dt  = [spm_type('float64') spm_platform('bigend')]; % that's how the data is in RAM
-    V_part.dat = spm_erode(data{i}); % erode once
+    er         = data{i};
+    for e = 1:n_erode, er = spm_erode(er); end % erode n_erode times
+    V_part.dat = er;
     V_part.pinfo(1) = 1; % dtype now double so scale factor = 1
     V_part.pinfo(3) = 0; % read from from .dat
     % I think we could add V_part to xY : xY(i).spec = V_part;
@@ -71,5 +84,7 @@ end
 
 %-Save
 %==========================================================================
-noise_f = spm_file(V_epi(1).fname,'ext','.mat','prefix',fname);
-save(noise_f,'segment');
+if ~isempty(fname)
+    noise_f = spm_file(V_epi(1).fname,'ext','.mat','prefix',fname);
+    save(noise_f,'segment');
+end

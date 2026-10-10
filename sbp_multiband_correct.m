@@ -10,17 +10,15 @@ n_subs       = length(all_sub_ids);
 for sub = 1:n_subs
     sub_id    = all_sub_ids(sub);
        
-    epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        = epi(1); % if there are brain and spinal, just take brain
+    epi        = get_ref_epi(BIDS,sub_id);
     
     func_dir   = spm_file(epi,'path');
     
     gi = 1;
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
+        for run = get_run_numbers(BIDS,sub_id,ses)
             fprintf('ses %d run %d\n',ses,run);
-            epi       =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi       =  epi(1); % if there are brain and spinal, just take brain
+            epi       =  get_func_files(BIDS,sub_id,ses,run);
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string    = char(epi);
             
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{3}.evaluated = arg;

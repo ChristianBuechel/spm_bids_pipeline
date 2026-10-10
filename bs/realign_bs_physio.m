@@ -11,7 +11,7 @@ n_subs       = length(all_sub_ids);
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     
-    epi        =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
+    epi        =  get_ref_epi(BIDS,sub_id);
     func_dir   = spm_file(epi,'path');
     
     
@@ -19,8 +19,8 @@ for sub = 1:n_subs
     all_aniftis = [];
     gi  = 1;
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi =  get_func_files(BIDS,sub_id,ses,run);
             % copy all asub files to ./res
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(epi,'prefix','a');
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.copyto = fullfile(func_dir,'res');
@@ -51,8 +51,8 @@ for sub = 1:n_subs
     
     %rename *.mat to asub*mat
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi =  get_func_files(BIDS,sub_id,ses,run);
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = fullfile(func_dir,'res',spm_file(spm_file(epi,'filename'),'prefix','res_','ext','.mat')); %
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = fullfile(func_dir,'res');
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep.pattern = 'res_';
@@ -72,8 +72,8 @@ for sub = 1:n_subs
     gi = gi + 1;
     
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi =  get_func_files(BIDS,sub_id,ses,run);
 
             % now copy pbrasub files to fun dir (and the rp*txt as rp_pbasub)
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = fullfile(func_dir,'res',spm_file(spm_file(epi,'filename'),'prefix','pbra')); %

@@ -10,14 +10,12 @@ nSess               = vars.nSess;
 BIDS                = spm_BIDS(preprocPath);
 
 for sub = 1:nSubs 
-    epi         = spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi         = epi(1); % if there are brain and spinal, just take brain
+    epi         = get_ref_epi(BIDS,subIDs(sub));
     meanFile    = char(spm_file(epi,'prefix','meana'));
     allFiles = [];
     for sess = 1:nSess
-        for run = 1:nRuns
-            epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'ses',sprintf('%02d',sess),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi                =  epi(1); % if there are brain and spinal, just take brain
+        for run = get_run_numbers(BIDS,subIDs(sub),sess)
+            epi                =  get_func_files(BIDS,subIDs(sub),sess,run);
             workFile = spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^ra'),1);
             allFiles = [allFiles;workFile];
         end

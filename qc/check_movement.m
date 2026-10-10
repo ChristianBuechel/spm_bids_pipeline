@@ -2,7 +2,6 @@ function check_movement(subIDs,movReg,eventName)
 
 [path,vars,~,~,qc]  = get_study_specs;
 preprocPath         = path.preprocDir;
-nRuns               = vars.nRuns;
 nSubs               = length(subIDs);
 nSess               = vars.nSess;
 
@@ -17,9 +16,10 @@ for sub = 1:nSubs
         if nSess > 1
             fprintf(' - session%d',sess);
         end
-        for run = 1:nRuns
-            epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'ses',sprintf('%02d',sess),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi = epi(1); % if there are brain and spinal, just take brain
+        ses_runs = get_run_numbers(BIDS,subIDs(sub),sess); % runs that exist
+        clear matFirst matLast wsm bsm betSessMov mov2First
+        for run = ses_runs
+            epi = get_func_files(BIDS,subIDs(sub),sess,run);
             rpFile  = char(spm_file(epi,'prefix','rp_a','ext','txt'));
             matFile = char(spm_file(epi,'prefix','a','ext','mat'));
             runData = load(rpFile);
@@ -66,11 +66,12 @@ for sub = 1:nSubs
         ylim([min(mParams(:))+min(mParams(:))*0.2 max(mParams(:))+max(mParams(:))*0.2]);
         xticks([1 nScans]);
         set(gcf,'color','w');
+        nRuns = numel(ses_runs);
         if nRuns > 1
-            for run = 1:nRuns-1
-                betSessMov(:,:,run) = matLast(:,:,run)/matFirst(:,:,run+1);
-                mov2First(:,:,run) = matLast(:,:,run)/matFirst(:,:,1);
-                bsm(:,run) = abs(betSessMov(1:3,4,run));
+            for k = 1:nRuns-1 % k-th existing run to the next existing one
+                betSessMov(:,:,k) = matLast(:,:,ses_runs(k))/matFirst(:,:,ses_runs(k+1));
+                mov2First(:,:,k) = matLast(:,:,ses_runs(k))/matFirst(:,:,ses_runs(1));
+                bsm(:,k) = abs(betSessMov(1:3,4,k));
             end
             if any(bsm(:) > qc.threshMov)
                 fprintf('Sub%02d: movement between runs of %.2f mm detected, please check participant\n',subIDs(sub),max(bsm(:)));
@@ -86,7 +87,7 @@ for sub = 1:nSubs
             plot([zeros(3,1) bsm]','o-');xlim([0.5 nRuns+0.5]);ylim([-3 3]);title('Movement between runs');
             ylabel('Movement (mm)');
             subplot(2,1,2)
-            plot(wsm','o-');xlim([0.5 nRuns+0.5]);ylim([-3 3]);title('Movement within runs (last-first volume)');
+            plot(wsm(:,ses_runs)','o-');xlim([0.5 nRuns+0.5]);ylim([-3 3]);title('Movement within runs (last-first volume)');
             xlabel('Run Number');
             ylabel('Movement (mm)');
             set(gcf,'color','w');       
@@ -107,9 +108,8 @@ if movReg == 1
                 fprintf(' - session%d',sess);
             end
             fprintf('\n');
-            for run = 1:nRuns
-                epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'ses',sprintf('%02d',sess),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-                epi = epi(1); % if there are brain and spinal, just take brain
+            for run = get_run_numbers(BIDS,subIDs(sub),sess)
+                epi = get_func_files(BIDS,subIDs(sub),sess,run);
                 rpFile  = char(spm_file(epi,'prefix','rp_a','ext','txt'));
                 mParams = load(rpFile);
                 diffParams = abs(diff(mParams(:,1:3)));

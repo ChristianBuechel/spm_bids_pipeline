@@ -3,26 +3,34 @@ function realign_2_2_vdm(all_sub_ids)
 % realign epi images using a brainmask
 % This is part 2 of 2 here we take a brain mask but do not reslice all
 % images (this is done when applying the vdms in the next step)
+% The images are the P<epi> images (P: see epi_prefix); the realignment parameters
+% rp_<P><epi>.txt and the header sidecars P<epi>.mat are updated. The brain mask is the
+% one of sbp_create_mask (bins3r<vars.T1maskID> in the func folder).
 
-[path,vars]  = get_study_specs; 
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
-    epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        =  epi(1); % if there are brain and spinal, just take brain
+    epi        = get_ref_epi(BIDS,sub_id);
     func_dir   = spm_file(epi,'path');
 
     cnt        = 1;
+    all_niftis = {}; % reset: subjects can have different numbers of runs
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi                =  epi(1); % if there are brain and spinal, just take brain
-            run_niftis         =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^a'),Inf);
-            all_niftis{cnt,1}  =  cellstr(run_niftis);
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi                =  get_func_files(BIDS,sub_id,ses,run);
+            all_niftis{cnt,1}  =  cellstr(epi_frames(epi,vars,'in')); %#ok<AGROW> % frames of P<epi>
             cnt                =  cnt + 1;
         end
+    end
+    weight_mask = fullfile(func_dir,spm_file(['r' vars.T1maskID],'prefix','bins3')); % made by sbp_create_mask
+    if ~isfile(char(weight_mask))
+        error('sub-%02d: brain mask %s not found, was sbp_create_mask run?',sub_id,char(weight_mask));
     end
     % fill with default options
     gi  = 1;    
@@ -33,7 +41,7 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.spatial.realign.estimate.eoptions.rtm = 1;
     matlabbatch{gi,sub}.spm.spatial.realign.estimate.eoptions.interp = 2;
     matlabbatch{gi,sub}.spm.spatial.realign.estimate.eoptions.wrap = [0 0 0];
-    matlabbatch{gi,sub}.spm.spatial.realign.estimate.eoptions.weight = fullfile(func_dir,'bins3rbrain_mask.nii');
+    matlabbatch{gi,sub}.spm.spatial.realign.estimate.eoptions.weight = cellstr(weight_mask);
 end
 
 %save('realign_2_2_vdm','matlabbatch');

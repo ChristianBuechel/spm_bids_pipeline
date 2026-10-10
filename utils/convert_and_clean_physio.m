@@ -234,9 +234,9 @@ for sub = 1:n_subs
                         %Catch correct epis
                         switch runloop
                             case 1  
-                                epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',all_sub_ids(sub)),'ses',sprintf('%02d',ses),'run',sprintf('%02d',iter),'task',taskName,'type','bold');
+                                epi = get_func_files(BIDS,all_sub_ids(sub),ses,iter,'task',taskName);
                             case nRuns
-                                epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',all_sub_ids(sub)),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',taskName,'type','bold');
+                                epi = get_func_files(BIDS,all_sub_ids(sub),ses,run,'task',taskName);
                         end
         
                         nScans = numel(spm_vol(epi{:,1}));

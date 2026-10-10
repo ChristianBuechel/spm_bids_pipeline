@@ -2,11 +2,17 @@ function create_fieldmap(all_sub_ids)
 % function create_fieldmap(all_sub_ids)
 % takes magnitude and phasediff images to estimate a voxel displacement map
 % (vdm) to be used to correct EPI distortions
-% it provides vdm5_asub... files for each 4D epi file (run) in the func directory
+% it provides vdm5_<P><epi> files for each 4D epi file (run) in the func directory,
+% i.e. with the name of the EPI (e.g. vdm5_ansub-01_ses-01_task-x_run-01_part-mag_bold.nii,
+% P: prefix of the realigned images, see epi_prefix and epi_file(...,'vdm')).
+% It also writes the unwarped mean umean<P><epi> (the mean of realign 1 is unwarped).
 % see https://www.jiscmail.ac.uk/cgi-bin/webadmin?A2=fsl;d2c47aa4.1606 for
 % details
 
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 
@@ -23,27 +29,31 @@ end
 
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
-    all_meta_pd    = spm_BIDS(BIDS,'metadata','sub',sprintf('%02d',sub_id),'type','phasediff'); % get the 2 echo times from the json files
+    have_pm    = false(0); % reset for each subject, (ses,run) matrix, which runs have a phasediff
+    have_run   = false(0); % (ses,run) matrix, which runs exist
+    all_niftis = {};
+    all_epis   = {};
+    all_meta_pd  = spm_BIDS(BIDS,'metadata','sub',sprintf('%02d',sub_id),'type','phasediff'); % get the 2 echo times from the json files
     if numel(all_meta_pd) > 1
         meta_pd = all_meta_pd{1};
     else
         meta_pd = all_meta_pd;
     end
-    meta_bold  = spm_BIDS(BIDS,'metadata','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'type','bold'); % get total readout time
-    epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        = epi(1); % if there are brain and spinal, just take brain
-    mean_file  = spm_file(epi,'prefix','meana');    % we need meanasub (for session1 and first epi images for all other sessions
+    meta_bold  = spm_BIDS(BIDS,'metadata','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'acq',{'brain',''},'part',{'mag',''},'type',{'bold','cbv'}); % get total readout time (of the main task, brain, magnitude: one entry)
+    epi        = get_ref_epi(BIDS,sub_id);
+    mean_file  = epi_file(epi,vars,'mean');    % we need mean<P><epi> (for session1 and first epi images for all other sessions
     mean_dir   = spm_file(mean_file,'path');
     
     cnt        = 1;
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi                =  epi(1); % if there are brain and spinal, just take brain
-            run_niftis         =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^a'),1); %first EPI in each run
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi                =  get_func_files(BIDS,sub_id,ses,run);
+            run_niftis         =  epi_frames(epi,vars,'in',1); %first EPI in each run (P<epi>)
             all_niftis{ses,run}=  cellstr(run_niftis);
+            all_epis{ses,run}  =  epi;                         % raw BIDS name, defines the name of the vdm file
             pm                 =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'type','phasediff');
             have_pm(ses,run)   =  ~isempty(pm); % binary matrix to quickly see which PMs we have
+            have_run(ses,run)  =  true;
             cnt                =  cnt + 1;
         end
     end
@@ -66,18 +76,18 @@ for sub = 1:n_subs
     template.spm.tools.fieldmap.calculatevdm.subj.writeunwarped = 1;
     template.spm.tools.fieldmap.calculatevdm.subj.anat = {''};
     template.spm.tools.fieldmap.calculatevdm.subj.matchanat = 0;
-    template.spm.tools.fieldmap.calculatevdm.subj.matchvdm = 1;
+    template.spm.tools.fieldmap.calculatevdm.subj.matchvdm = 0;
     template.spm.tools.fieldmap.calculatevdm.subj.defaults.defaultsval.mflags.template = {FM_templ};
     % we have 2 cases: 1) a PM for each run 2) one PM per session
-    if sum(have_pm(:)) == prod(size(have_pm)) % one pm per run
+    if all(have_pm(have_run)) % one pm per run (of the runs that exist)
         gi  = 1;
         for ses = 1:vars.nSess
-            for run = 1:vars.nRuns
+            for run = find(have_run(ses,:))
                 matlabbatch{gi,sub} = template;
                 pd = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'type','phasediff');
                 fmap_dir = spm_file(pd,'path');
                 matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.data.presubphasemag.phase = pd;
-                magn_f = strrep(pd,'phasediff','magnitude1'); % hack, bc spm_BIDS does not reveal the magnitude image name although its in there?
+                magn_f = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'type','magnitude1');
                 matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.data.presubphasemag.magnitude = cellstr(magn_f);
                 if ses == 1 & run == 1
                     matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.session(1).epi = mean_file;
@@ -88,15 +98,13 @@ for sub = 1:n_subs
                 matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.sessname = 'run';
                 gi = gi + 1;
                 % now we have to move and rename the vdm file
-                % e.g. vdm5_scsub-92_ses-01_run-01_phasediff_run1.nii in fmap
-                % and want: vdm5_asub-88_ses-01_task-pdev_run-01_bold.nii in func
-                
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = fullfile(fmap_dir,sprintf('vdm5_scsub-%02d_ses-%02d_run-%02d_phasediff.nii',sub_id,ses,run)); % move and rename vdms
+                % e.g. vdm5_scsub-92_ses-01_run-01_phasediff.nii in fmap
+                % and want: vdm5_<P>sub-88_ses-01_task-pdev_run-01_part-mag_bold.nii in func (epi_file(epi,vars,'vdm'))
+
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(pd,'prefix','vdm5_sc'); % move and rename vdms
                 matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).pattern = 'vdm5_sc';
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).repl = 'vdm5_a';
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(2).pattern = sprintf('_run-%02d_phasediff',run);
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(2).repl = sprintf('_task-%s_run-%02d_bold',vars.task,run);
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).pattern = '^.*$'; % the whole name is replaced ...
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).repl = char(spm_file(epi_file(all_epis{ses,run},vars,'vdm'),'basename')); % ... by the name of the vdm of this EPI
                 matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.unique = false;
                 gi = gi + 1;
             end
@@ -108,13 +116,15 @@ for sub = 1:n_subs
             pd = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',1),'type','phasediff');
             fmap_dir = spm_file(pd,'path');
             matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.data.presubphasemag.phase = pd;
-            magn_f = strrep(pd,'phasediff','magnitude1');
+            magn_f = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',1),'type','magnitude1');
             matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.data.presubphasemag.magnitude = cellstr(magn_f);
-            for run = 1:vars.nRuns
-                matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.session(run).epi = all_niftis{ses,run};
+            ses_runs = find(have_run(ses,:)); % runs that exist in this session
+            for k = 1:numel(ses_runs)
+                matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.session(k).epi = all_niftis{ses,ses_runs(k)};
             end
+            run = ses_runs(end); % (used below for func_dir)
             if ses == 1
-                matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.session(1).epi = mean_file; %unwarp mean instead of 1st EPI bc this is what we coregister to T1
+                matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.session(1).epi = mean_file; % unwarp mean instead of 1st EPI bc this is what we coregister to T1
             end
             func_dir   = spm_file(all_niftis{ses,run},'path');
             matlabbatch{gi,sub}.spm.tools.fieldmap.calculatevdm.subj.sessname = 'run';
@@ -123,16 +133,15 @@ for sub = 1:n_subs
             % now we need to rename the vdm files in the batch system
             % we have vdm5_scsub-88_ses-01_run-01_phasediff_run1.nii, ..run2
             % etc in fmap
-            % and want: vdm5_asub-88_ses-01_task-pdev_run-01_bold.nii in func
-            %           vdm5_asub-88_ses-01_task-pdev_run-02_bold.nii in func
+            % and want: vdm5_<P>sub-88_ses-01_task-pdev_run-01_part-mag_bold.nii in func
+            %           vdm5_<P>sub-88_ses-01_task-pdev_run-02_part-mag_bold.nii in func
             % also rename umean... to cmean... (it is not yet coregistered but will be in the next step)
-            for run = 1:vars.nRuns
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = fullfile(fmap_dir,sprintf('vdm5_scsub-%02d_ses-%02d_run-01_phasediff_run%d.nii',sub_id,ses,run)); % move and rename vdms
+            for k = 1:numel(ses_runs) % SPM numbers the vdm files by the session index k, we want the run number
+                run = ses_runs(k);
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(pd,'prefix','vdm5_sc','suffix',sprintf('_run%d',k)); % move and rename vdms
                 matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).pattern = 'vdm5_sc';
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).repl = 'vdm5_a';
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(2).pattern = sprintf('_run-01_phasediff_run%d',run);
-                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(2).repl = sprintf('_task-%s_run-%02d_bold',vars.task,run);
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).pattern = '^.*$'; % the whole name is replaced ...
+                matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).repl = char(spm_file(epi_file(all_epis{ses,run},vars,'vdm'),'basename')); % ... by the name of the vdm of this EPI
                 matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.unique = false;
                 gi = gi + 1;
             end

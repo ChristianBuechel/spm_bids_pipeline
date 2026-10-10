@@ -11,12 +11,12 @@ run_parallel = 1;
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     gi         = 1;
-    epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
+    epi                =  get_ref_epi(BIDS,sub_id);
     func_dir           =  spm_file(epi,'path');
     mkdir(char(fullfile(func_dir,'res')));
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi                =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi                =  get_func_files(BIDS,sub_id,ses,run);
             rename_mat = 0;
             if exist(char(spm_file(epi,'prefix','a','ext','.mat')),'file') %assume original realign
                 rename_mat = 1;

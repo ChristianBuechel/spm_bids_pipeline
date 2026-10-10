@@ -1,11 +1,18 @@
-function warp_images(all_sub_ids)
-% function warp_images
-% warps the skullstrip to the template space
-% also warps the mean EPI to the template space
+function sbp_warp(all_sub_ids)
+% function sbp_warp(all_sub_ids)
+% warps the skull-stripped T1 and its GM / WM segments to the template space with the Dartel
+% flow field u_rc1<T1w> (sbp_create_dartel): w<vars.skullStripID>, wc1<T1w>, wc2<T1w> in the anat folder.
+% Also warps the mean EPI of realign 2 (mean<P><epi>, P: see epi_prefix) to the template space with
+% y_epi_2_template.nii (sbp_create_trans): wmean<P><epi> in the func folder.
+% Needs sbp_skullstrip, sbp_create_dartel, sbp_create_trans and sbp_realign_2_2.
+%   all_sub_ids   subject numbers, e.g. 1:5 (run in parallel if vars.parallel = 1)
 
 
 % resolve paths
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 
 n_subs        = length(all_sub_ids);
@@ -13,12 +20,10 @@ n_subs        = length(all_sub_ids);
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); % if there are more than 1
+    struc_file = get_anat(BIDS,sub_id);
     anat_dir   = spm_file(struc_file,'path');
 
-    epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        = epi(1); % if there are brain and spinal, just take brain
+    epi        = get_ref_epi(BIDS,sub_id);
     func_dir   = spm_file(epi,'path');
 
     strip_file  = fullfile(anat_dir, vars.skullStripID);
@@ -27,8 +32,8 @@ for sub = 1:n_subs
     c2_file     = spm_file(struc_file,'prefix','c2');
     u_rc1_file  = spm_file(struc_file,'prefix','u_rc1');
 
-    mean_file   = spm_file(epi,'prefix','meana');
-    
+    mean_file   = epi_file(epi,vars,'mean'); % mean<P><epi> (of realign 2), is written as wmean<P><epi> (prefix w, see epi_prefix)
+
     flowfield_epi =  fullfile(func_dir,'y_epi_2_template.nii');
     
     gi    = 1;

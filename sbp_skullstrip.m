@@ -1,9 +1,18 @@
-function skullstrip(all_sub_ids)
-% function skullstrip
-% strips the skull
+function sbp_skullstrip(all_sub_ids)
+% function sbp_skullstrip(all_sub_ids)
+% strips the skull of the T1w image (get_anat): the T1w is multiplied with a brain mask,
+% (c1 + c2) > 0.2, i.e. GM + WM of the segmentation of the T1w. The result is written
+% to the anat folder as vars.skullStripID (default skull-strip-T1.nii).
+%
+% Needs c1<T1w> and c2<T1w> in the anat folder, i.e. run after the segmentation of the T1w
+% (sbp_coreg_nlin_vaso_T1 or sbp_coreg_nlin, sbp_seg_T1 in the VDM workflow).
+%   all_sub_ids   subject numbers, e.g. 1:5 (run in parallel if vars.parallel = 1)
 
 % resolve paths
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 
@@ -12,8 +21,7 @@ output_name   = vars.skullStripID;
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); % if there are more than 1
+    struc_file = get_anat(BIDS,sub_id);
     anat_dir   = spm_file(struc_file,'path');
     
     

@@ -1,8 +1,6 @@
 function copy_project(source_dir,dest_dir,doit)
 % copies BIDS relevant files from source to dest
-% using spm_BIDS
-% note that the current version of spm_BIDS misses the magnitude images for
-% fieldmaps
+% using spm_BIDS (which now also lists the fieldmap magnitude images)
 if nargin<3
     doit = 0;
 end

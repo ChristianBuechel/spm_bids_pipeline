@@ -1,17 +1,19 @@
-function seg_T1(all_sub_ids)
+function sbp_seg_T1(all_sub_ids)
 % function seg_T1
 % performs a simple segmentatoon of the T1 image and does the Dartel export
 
 % resolve paths
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
       
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); %in case there are more sessions with T1w
+    struc_file = get_anat(BIDS,sub_id);
     
     gi    = 1;
     matlabbatch{gi,sub}.spm.spatial.preproc.channel.vols = cellstr(struc_file); % T1 image gets segmented 
@@ -61,7 +63,6 @@ end
 
 if vars.parallel == 1
     run_spm_parallel(matlabbatch, n_procs);
-    %run_spm_multiple(matlabbatch, n_procs);
 else
     run_spm_sequential(matlabbatch);
 end

@@ -81,8 +81,7 @@ for sub = 1:n_subs
         F_con(ii,:) = ind ./ sum(ind);
     end
     % get transformation stuff
-    epi            = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi            = epi(1); % if there are brain and spinal, just take brain
+    epi            = get_ref_epi(BIDS,sub_id);
     func_dir       = spm_file(epi,'path');
     Vwm_file       = spm_vol(char(spm_file(epi,'prefix','wmeana')));
     Nepi_2_templ   = nifti(fullfile(func_dir, 'y_epi_2_template.nii'));

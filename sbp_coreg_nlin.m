@@ -1,22 +1,31 @@
-function nonlin_coreg(all_sub_ids)
-% function nonlin_coreg
+function sbp_coreg_nlin(all_sub_ids)
+% function sbp_coreg_nlin(all_sub_ids)
 % performs a nonlinear coregistration between mean EPI and T1
-% writes a cmean* file that is the m,ean EPI in the space of the T1
+% writes a cmean<P>* file that is the mean EPI in the space of the T1 (and the deformation
+% field y_mean<P>*, P = prefix of the images that were realigned, see epi_prefix)
 % also does a segmentation of the T1, and the Dartel export, so we don't
 % have to do this again
+%
+% The normalisation of the mean EPI to the template made of the T1 segments uses fixed settings
+% (tested on whole brain 1.5 mm SMS EPI, gradient correlation with the T1): segments smoothed with
+% 1 mm (SPM: 3), sampling distance and smoothing 2 mm (SPM: 3), bias correction on (60 mm), affine
+% regularisation 'subj', regularisation x1. For the VASO slab (no bias correction, stiffer warp) use
+% sbp_coreg_nlin_vaso_T1. Needs the T1 and the mean EPI of realign 1 (sbp_realign_1_2).
 
 tmpTPM = 'TPM_tmp.nii';
 
 % resolve paths
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
       
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); %in case there are more sessions with T1w
+    struc_file = get_anat(BIDS,sub_id);
     anat_dir   = spm_file(struc_file,'path');
     
     c1_file    = spm_file(struc_file, 'prefix','c1');
@@ -33,9 +42,9 @@ for sub = 1:n_subs
     sc5_file    = spm_file(struc_file, 'prefix','sc5');
     sc6_file    = spm_file(struc_file, 'prefix','sc6');
     
-    epi         = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi         = epi(1); % if there are brain and spinal, just take brain
-    mean_file   = spm_file(epi,'prefix','meana');
+    epi         = get_ref_epi(BIDS,sub_id);
+    mean_file   = epi_file(epi,vars,'mean'); % mean<P><epi> from realign 1 (P: see epi_prefix); SPM names the outputs
+                                             % c<mean file> (cmean<P>...) and y_<mean file> (y_mean<P>...) after it
 
     
     gi    = 1;
@@ -82,7 +91,7 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.spatial.smooth.data(4,1) = c4_file;
     matlabbatch{gi,sub}.spm.spatial.smooth.data(5,1) = c5_file;
     matlabbatch{gi,sub}.spm.spatial.smooth.data(6,1) = c6_file;
-    matlabbatch{gi,sub}.spm.spatial.smooth.fwhm   = [3 3 3];
+    matlabbatch{gi,sub}.spm.spatial.smooth.fwhm   = [1 1 1]; % sharper template than the SPM default of 3 mm: better alignment (tested on pRFBOLD, 1.5 mm SMS EPI)
     matlabbatch{gi,sub}.spm.spatial.smooth.dtype  = 0;
     matlabbatch{gi,sub}.spm.spatial.smooth.im     = 0;
     matlabbatch{gi,sub}.spm.spatial.smooth.prefix = 's';
@@ -107,11 +116,12 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.eoptions.tpm(1) = fullfile(anat_dir,tmpTPM);
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.eoptions.affreg = 'subj';
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.eoptions.reg = reg*[0 1e-05 0.005 0.0005 0.002];%if reg is bigger nonlinear will be less aggressive
-    matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.eoptions.fwhm = 3;
-    matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.eoptions.samp = 3;
-    %matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.bb = [NaN NaN NaN; NaN NaN NaN];
-    matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.bb = [-100 -150 -100;100 150 100]; % bigger for larger diffs between T1 and EPI
-    matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.vox = [1.5 1.5 1.5];
+    matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.eoptions.fwhm = 2; % smoothing of the mean EPI for the registration (SPM: 3)
+    matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.eoptions.samp = 2; % sampling distance of the warp [mm] (SPM: 3), finer sampling is slower (about 3x)
+    matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.bb = [NaN NaN NaN; NaN NaN NaN];
+    %matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.bb = [-100 -150 -100;100 150 100]; % bigger for larger diffs between T1 and EPI
+    matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.vox = [NaN NaN NaN];
+    %matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.vox = [1.5 1.5 1.5];
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.interp = 4;
     matlabbatch{gi,sub}.spm.spatial.normalise.estwrite.woptions.prefix = 'c';
     gi = gi + 1;

@@ -4,18 +4,20 @@ function sbp_analyses(all_sub_ids, idx)
 %
 %   all_sub_ids: Array of subject IDs to analyze
 %   idx: Optional index to select analysis from analysis struct array
-%        If not provided, defaults to 1 
+%        If not provided, defaults to 1
 %
 %
-% calls get_study_specs.m to get various options in the structure analysis.XXX 
-% 
-% analysis.exclude           : struct array with fields "sub" "ses" and "run" e.g. analysis.exclude(1) = struct('sub',3, 'ses',1,'run',[5 6]); 
+% calls get_study_specs.m to get various options in the structure analysis.XXX
+%
+% analysis.exclude           : struct array with fields "sub" "ses" and "run" e.g. analysis.exclude(1) = struct('sub',3, 'ses',1,'run',[5 6]);
 %                              exclude runs 5 and 6 in session 1 subject 3; NB only run can be a vector!!
 % analysis.sess              : vector of sessions to be analyzed order is preserved e.g. [2 1];
-% analysis.prune             : use only those scans for which we have events defined in this analysis (plus 8s after last event+duration)  
-% analysis.concatenate       : concatenate runs  
+% analysis.prune             : use only those scans for which we have events defined in this analysis (plus 8s after last event+duration)
+% analysis.concatenate       : concatenate runs
 % analysis.ana               : 1 - FIR, 2 - hrf, 3 - lsa
-% analysis.name_ana          : name for the analysis (part of directory name)
+% analysis.name_ana          : name for the analysis (part of directory name). The directory is called
+%                              <noise_corr>_<name_ana>_<steps>_<shift>_<cvi>, where <steps> are the preprocessing steps of the
+%                              analysed images in the order they were run (the image prefix reversed), e.g. nr (rn<epi>.nii) or nrs (srn<epi>.nii)
 % analysis.lss               : do least squares separate analysis according to Mumford et al. based on lsa analysis (ana = 3)
 % analysis.n_base            : number of basis functions (ie number of FIR bins);
 % analysis.bin_size          : bin size for FIR anaylsis in TRs (1 if not sopecified)
@@ -23,15 +25,16 @@ function sbp_analyses(all_sub_ids, idx)
 % analysis.cond_names        : condition names that the analysis will use, need to be exactly as specified in tsv file
 % analysis.p_mod             : cell array with an entry for each condition, listing parametric modulators (more than one possible)
 %                            : e.g. for three conditions, where the 2nd will use parametric modulators RT and int {{},{'RT','int'},{}}
-%                            : name of the parametric modulator needs to be exactly as in the tsv file (columns 4..n)              
+%                            : name of the parametric modulator needs to be exactly as in the tsv file (columns 4..n)
 % analysis.t_con             : n t-contrasts as a n x conditions(plus parametric modulators) matrix
 % analysis.t_con_names       : cell array of n strings
 % analysis.f_con             : cell array of f_con matrices (only performed in 2nd level analyses)
 % analysis.f_con_names       : cell array of n strings (only performed in 2nd level analyses)
-% analysis.skernel           : smoothing kernel to use can be scalar or 1x3 vector (for anisotropic smoothing) 
+% analysis.skernel           : smoothing kernel to use can be scalar or 1x3 vector (for anisotropic smoothing)
 % analysis.shift             : add a constant to all onsets (in TRs)
 %
-%
+% analysis.prefix            : which epi files to analyse, default: the prefix after all steps of vars.preproc.steps (epi_prefix 'analysis'),
+%                              e.g. rn (NORDIC, realign) or srn (+ smooth); a different value overrides it for this analysis
 % analysis.do_model          : create first level model
 % analysis.bs                : perform brainstem specific analysis (not fully implemented yet)
 % analysis.do_est            : estimate first level model
@@ -42,33 +45,37 @@ function sbp_analyses(all_sub_ids, idx)
 %
 % analysis.do_cons           : estimate contrasts
 % analysis.do_warp           : perform appropriate warping to get con/beta images to template space for 2nd level analyses;
-% analysis.do_smooth         : smooth warped images 
+% analysis.do_smooth         : smooth warped images
 %
-% analysis.noise_corr        : a string that can contain the following words to indicate which noise regressors 
+% analysis.noise_corr        : a string that can contain the following words to indicate which noise regressors
 %                              to include: "mov6" "mov24" "physio" "other" "wm" "csf" "roi" "movnoise" (see code for specific forma of the *.txt or *.mat files)
 %
 % analysis.cvi               : non-sphericity either "none" "AR(1)" "FAST" or "wls" (NB "wls" requires the wls toolbox by Joern Diedrichsen)
 % analysis.hpf               : High pass filter in s
 % analysis.do_fact           : perform 2nd level anova w/o subject constants
-% analysis.do_fact_con       : estimate t-contrasts for group 
+% analysis.do_fact_con       : estimate t-contrasts for group
 % analysis.fact_dept         : non-sphericity 2nd level ANOVA (cov)
 % analysis.fact_var          : non-sphericity 2nd level ANOVA (var)
 %
 % analysis.do_one_t          : perform one sample t-tests for all t-contrasts
 %
-% one can also define groups of subjects 
+% one can also define groups of subjects
 % analysis.group_weights     : adds a level of contrasts at the group level (e.g. [1 1;1 -1;-1 1] - tests for common and different patterns for 2 groups)
 % analysis.group_ana_names   : name of group levels e.g. {'All','Sporty>Lazy','Lazy>Sporty'};
 % analysis.all_subs          : subjects to include
 % analysis.group_ind         : vector with indices saying who belongs to which group (e.g. sporty = 1, lazy = 2) same size as analysis.group_ind
-% if field "group_ind" does not exist in analysis all subjects are included in a single group 
+% if field "group_ind" does not exist in analysis all subjects are included in a single group
 
- 
-    
-% 
+
+
+%
 %% Prepare everything
 % now read in stuff form get_study_specs
-[path,vars,analysis]  = get_study_specs;
+specs    = get_study_specs;
+path     = specs.path;
+vars     = specs.vars;
+analysis = specs.analysis;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 del_all      = 0;
@@ -114,14 +121,18 @@ do_correct_vasa = analysis.do_correct_vasa;
 do_warp         = analysis.do_warp;
 do_smooth       = analysis.do_smooth;
 
+if ~isfield(analysis,'prefix')
+    analysis.prefix = epi_prefix(vars,'analysis'); % images after ALL steps of vars.preproc.steps, e.g. 'rn' (NORDIC, realign) or 'srn' (+ smooth)
+end
+
 % TODO change ppi flag logic
 if isfield(analysis,'ppi')
-    do_ppi          = analysis.do_ppi; 
+    do_ppi          = analysis.do_ppi;
     if do_ppi
 
         % get the ppi specs
         ppi_specs = analysis.ppi;
-    
+
         if parallel && ppi_specs.skernel > 0
             warning(['You are about to apply smoothing to the ppi seed time series in parallel mode.' ...
                 'This operation requires a significant amount of RAM and may cause your system to crash. Proceed with caution.'])
@@ -131,8 +142,8 @@ if isfield(analysis,'ppi')
         % we need this bc we check for every subject if the we need to re-estimate the base model
         % if it does not neeed to be re-estimated, do_model will be set to false for this subject
         % later in the code. Thus, we save the original value here
-        orig_do_model = do_model; 
-        orig_do_est   = do_est; 
+        orig_do_model = do_model;
+        orig_do_est   = do_est;
     end
 else
     do_ppi          = false;
@@ -187,9 +198,9 @@ mat_name          = which(mfilename);
 [~,mat_name,~]    = fileparts(mat_name);
 
 if ana == 1 % FIR
-    warp_beta         = 0; 
+    warp_beta         = 0;
     warp_s_con        = 1; % simple cons
-    
+
 end
 
 if ana == 2 % HRF
@@ -204,7 +215,7 @@ end
 
 if concatenate % simple cons are not required as we can use the betas, but the other cons should be warped
     warp_beta         = 1;
-    warp_s_con        = 0; % not simple cons       
+    warp_s_con        = 0; % not simple cons
 end
 
 n_base            = analysis.n_base; % # of basis functions (FIR model)
@@ -212,7 +223,9 @@ name_ana          = analysis.name_ana;
 
 
 % assemble directory name
-anadirname  = [noise_corr '_' name_ana '_' num2str(shift) '_' cvi];
+% the tag lists the steps the analysed images went through in the order they were run: it is the image
+% prefix reversed (SPM prepends), e.g. 'srn' --> 'nrs' (NORDIC, realign, smooth), 'rn' --> 'nr', 'ra' --> 'ar'
+anadirname  = [noise_corr '_' name_ana '_' fliplr(analysis.prefix) '_' num2str(shift) '_' cvi];
 
 if bs
     anadirname = ['BS_' anadirname];
@@ -231,19 +244,19 @@ end
 %% Main analyis loop
 matlabbatch = [];
 del_all = 0;
-model_changed = false; 
+model_changed = false;
 
 % Check for mixed base model situation in PPI analysis
 % i.e., some subjects need to have the base model estimated, others not.
 % In this case we cannot continue as the matlabatch will be different
 if do_ppi
-    ppi_consistent= check_ppi_consistency(all_sub_ids, path, anadirname);
+    ppi_consistent = check_ppi_consistency(all_sub_ids, path, anadirname);
     if ~ppi_consistent; return; end
 end
 
 
 for sub = 1:n_subs
-    
+
     mbi        = 1;
     sub_id     = all_sub_ids(sub);
     if numel(sess_2_ana) > 1
@@ -251,76 +264,81 @@ for sub = 1:n_subs
     end
     cnt        = 0;
     % for now all sessions are converted to runs
-    
+
     %prepare exclusions
     epifiles = [];
     tsvfiles = [];
-    
+
     % harvest epifiles and tsvfiles and honor exclusions
     for i_ses = 1:numel(sess_2_ana)
-    ses = sess_2_ana(i_ses);
-        for run = ana_runs
+        ses = sess_2_ana(i_ses);
+        existing_runs = get_run_numbers(BIDS,sub_id,ses); % subjects can have fewer runs
+        if ~isempty(setdiff(ana_runs,existing_runs))
+            warning('sub %d ses %d: run(s) %s not found, skipped',sub_id,ses,mat2str(setdiff(ana_runs,existing_runs)));
+        end
+        for run = intersect(ana_runs,existing_runs)
             if (~isfield(analysis,'exclude')) || (not_excluded(analysis.exclude,sub_id,ses,run))
                 cnt = cnt + 1;
-                epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-                epi = epi(1); % if there are brain and spinal, just take brain
+                epi = get_func_files(BIDS,sub_id,ses,run);
                 epifiles{cnt} = epi;
-                tsv = strrep(epi,'_bold.nii','_events.tsv'); % change BOLD filename to proper tsv file name
+                tsv = strrep(strrep(epi,'_part-mag',''),'_bold.nii','_events.tsv'); % change BOLD filename to proper tsv file name (no part- tag in BIDS events files)
                 tsvfiles{cnt} = char(spm_file(tsv,'suffix', analysis.events)); % ... and add suffix
             end
         end
     end
-    n_run      = cnt; 
+    n_run      = cnt;
     n_o_run    = n_run; % keep original # of runs bc they will be set to 1 when we concatenate
-    
+
     % get relevant dirs
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); % if there are more than 1
-    
+    struc_file = get_anat(BIDS,sub_id);
+
     % now that we can analyse all sessions seperately, we need the 1st ses, 1st run for the mean epi and the deformations
-    m_epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');%ses 1, run 1
-    m_epi = m_epi(1); % if there are brain and spinal, just take brain
-    mean_dir = spm_file(m_epi,'path'); % 
-    
+    m_epi = get_ref_epi(BIDS,sub_id);%ses 1, run 1
+    mean_dir = spm_file(m_epi,'path'); %
+
     template = []; template_wls = []; % everything will first go into a template struct and added to matlabbatch as needed
-    
+
     template.spm.stats.fmri_spec.timing.units   = 'scans';
     template_wls.spm.tools.rwls.fmri_rwls_spec.timing.units = template.spm.stats.fmri_spec.timing.units; % duplicate everything for WLS
-    
+
     template.spm.stats.fmri_spec.timing.RT      = TR;
     template_wls.spm.tools.rwls.fmri_rwls_spec.timing.RT = template.spm.stats.fmri_spec.timing.RT;
-    
+
     template.spm.stats.fmri_spec.timing.fmri_t  = 16;
     template_wls.spm.tools.rwls.fmri_rwls_spec.timing.fmri_t = template.spm.stats.fmri_spec.timing.fmri_t;
-    
-    template.spm.stats.fmri_spec.timing.fmri_t0 = round(vars.sliceTiming.refslice./max(vars.sliceTiming.so)*16);
+  
+    ref_slice = round(vars.sliceTiming.refslice./max(vars.sliceTiming.so)*16);
+    if isempty(ref_slice)
+        template.spm.stats.fmri_spec.timing.fmri_t0 = 8;
+    else
+        template.spm.stats.fmri_spec.timing.fmri_t0 = ref_slice;
+    end
     template_wls.spm.tools.rwls.fmri_rwls_spec.timing.fmri_t0 = template.spm.stats.fmri_spec.timing.fmri_t0;
-    
+
     template.spm.stats.fmri_spec.fact           = struct('name', {}, 'levels', {});
     template_wls.spm.tools.rwls.fmri_rwls_spec.fact = template.spm.stats.fmri_spec.fact;
-    
+
     template.spm.stats.fmri_spec.volt           = 1;
     template_wls.spm.tools.rwls.fmri_rwls_spec.volt = template.spm.stats.fmri_spec.volt;
-    
+
     template.spm.stats.fmri_spec.mthresh        = -Inf;
     template_wls.spm.tools.rwls.fmri_rwls_spec.mthresh = template.spm.stats.fmri_spec.mthresh;
-    
+
     template.spm.stats.fmri_spec.global         = 'None';
     template_wls.spm.tools.rwls.fmri_rwls_spec.global = template.spm.stats.fmri_spec.global;
-    
+
     template.spm.stats.fmri_spec.cvi            = cvi;
     template_wls.spm.tools.rwls.fmri_rwls_spec.cvi = 'wls'; % here we differ
-    
+
     if bs == 1
         bs_file    = fullfile(path.templateDir,vars.brainstemID);
         template.spm.stats.fmri_spec.mask           = cellstr(fullfile(mean_dir,spm_file(spm_file(bs_file,'prefix','bins3c'),'filename'))); % specify which voxels to analyse
         template_wls.spm.tools.rwls.fmri_rwls_spec.mask = template.spm.stats.fmri_spec.mask;
     else
-       template.spm.stats.fmri_spec.mask           = cellstr(fullfile(mean_dir,'s3rbrain_mask.nii'));
-       template_wls.spm.tools.rwls.fmri_rwls_spec.mask = template.spm.stats.fmri_spec.mask;
+        template.spm.stats.fmri_spec.mask           = cellstr(fullfile(mean_dir,'s3rbrain_mask.nii'));
+        template_wls.spm.tools.rwls.fmri_rwls_spec.mask = template.spm.stats.fmri_spec.mask;
     end
-    
-    
+
     if ana == 1 % FIR
         if isfield(analysis,'bin_size')
             template.spm.stats.fmri_spec.bases.fir.length = analysis.bin_size*n_base;
@@ -328,11 +346,11 @@ for sub = 1:n_subs
             template.spm.stats.fmri_spec.bases.fir.length = TR*n_base;
         end
         template.spm.stats.fmri_spec.bases.fir.order  = n_base;
-        
+
     elseif ana == 2 || ana == 3 % HRF (also for LSA LSS)
         template.spm.stats.fmri_spec.bases.hrf.derivs = [0 0];
     end
-    
+
     template_wls.spm.tools.rwls.fmri_rwls_spec.bases = template.spm.stats.fmri_spec.bases;
 
 
@@ -344,8 +362,8 @@ for sub = 1:n_subs
 
         % Store final PPI directory path
         ppi_dir  = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('PPI_%s_%s', ppi_specs.str, anadirname));
-    
-    
+
+
     else
         a_dir    = fullfile(path.firstlevelDir,sprintf('sub-%02d',sub_id),anadirname);
     end
@@ -356,7 +374,7 @@ for sub = 1:n_subs
     z        = [];
     all_nuis = [];
     scan_vec = [];
-    
+
     for run = 1:n_run
         % go through all runs get min, max onset to trim scans and find conditions that are never used
         min_onset = Inf;
@@ -367,38 +385,39 @@ for sub = 1:n_subs
         end
         for ii=1:numel(analysis.cond_names)
             t_ind = find(strcmp(x.trial_type,analysis.cond_names(ii)));
-            if ~isempty(t_ind) || (concatenate == 1) % allow empty in some runs when concatenate, bc other runs have the condition
+            if ~isempty(t_ind) || (concatenate == 1) % allow empty in some runs when concatenate, bc other runs might have the condition
                 cond_exist(run,ii) = ~isempty(t_ind); % nevertheless track what we have
                 c_onset     = (x.onset(t_ind)')./TR + shift; % times in tsv files are in seconds according to BIDS
                 c_dur       = (x.duration(t_ind)')./TR;
                 min_onset   = min([min_onset c_onset]); % this can then be used to trim scans
                 if ana == 1 %FIR
-                    max_onset   = max([max_onset c_onset+template.spm.stats.fmri_spec.bases.fir.length./TR]); % FIR time  
+                    max_onset   = max([max_onset c_onset+template.spm.stats.fmri_spec.bases.fir.length./TR]); % FIR time
                 else
                     max_onset   = max([max_onset c_onset+c_dur]); % add duration !!
                 end
             end
         end
-        
+
         func_dir = spm_file(epifiles{run},'path');
         if bs == 1
             scans = spm_select('ExtFPlist', func_dir,spm_file(spm_file(epifiles{run},'filename'),'prefix','^bra'),Inf);
         else
-            scans = spm_select('ExtFPlist', func_dir,spm_file(spm_file(epifiles{run},'filename'),'prefix','^ra'),Inf);
+            scans = spm_select('ExtFPlist', func_dir,spm_file(spm_file(epifiles{run},'filename'),'prefix',['^' analysis.prefix]),Inf);
         end
         if prune == 1
-            scan_range{run} = [max(floor(min_onset),1) min(ceil(max_onset + 8./TR),size(scans,1))]; %leave + 8s at the end,
+            scan_range{run} = [max(floor(min_onset),1) min(ceil(max_onset + 8./TR),size(scans,1))]; % leave + 8s at the end,
             fprintf('Sub # %d run %d : orig scans: 1-%d will be pruned to %d-%d \n',sub_id,run,size(scans,1),scan_range{run}(1),scan_range{run}(2));
         else
             scan_range{run} = [1 size(scans,1)];
         end
     end
-    
+
     % fix things for non-existing conditions
     any_cond_exist = any(cond_exist,1); % binary mask for conds we don't have at all
     for ww = find(~any_cond_exist)
         warning(sprintf('Sub # %d misses : %s ',sub_id,char(analysis.cond_names(ww))));
     end
+
     % make a mask for all regressors that we need (ie zeros for
     % non-existing conds) takes p_mod into account
     i_reg = [];n_reg = [];
@@ -414,7 +433,7 @@ for sub = 1:n_subs
 
     p_mod           = analysis.p_mod(any_cond_exist); % prune pmods
 
-    if ~do_ppi 
+    if ~do_ppi
         if ~isempty(analysis.t_con)
             if any(~i_reg)
                 preserve   = find(~any(analysis.t_con(:,~i_reg),2)); % keep only those cons where we do not have weights in missing conds (incl param mods)
@@ -424,27 +443,25 @@ for sub = 1:n_subs
             t_con      = analysis.t_con(preserve,find(i_reg)); % prune t_con
             t_con_names= analysis.t_con_names(preserve); % ... and their names
         else
-           
-            t_con      = []; 
-            t_con_names= []; 
+            t_con      = [];
+            t_con_names= [];
         end
     else
-
         ppi_specs = analysis.ppi; % reinitialize ppi_specs
 
-        % Reset specification and estimation flags so that checks will 
-        % performed for every subject
+        % Reset specification and estimation flags so that checks will
+        % be performed for every subject
         do_model     = orig_do_model;
-        do_est       = orig_do_est; 
+        do_est       = orig_do_est;
 
-        % For PPI: Keep original contrasts, will be handled later when creating 
+        % For PPI: Keep original contrasts, will be handled later when creating
         % PPI regressors and adjusting contrast weights for missing conditions
         t_con       = analysis.t_con;
         t_con_names = analysis.t_con_names;
 
         % Adjust ppi tcon used for optimizing ROI selection based on
-        % task-related activation. Can only be used if there are no missing conditions for this contrast 
-        if isfield(ppi_specs, 'tcon') 
+        % task-related activation. Can only be used if there are no missing conditions for this contrast
+        if isfield(ppi_specs, 'tcon')
             preserve   = find(~any(ppi_specs.tcon.vec(:,~i_reg),2));
             if preserve
                 % prune t con if needed
@@ -459,14 +476,14 @@ for sub = 1:n_subs
         % script
         ppi_specs.conds_done = find(i_reg);
     end
-    
+
     cond_names = analysis.cond_names(any_cond_exist); % and prune conditions
     n_cond     = numel(cond_names);
     % from here on the 1st level analysis proceeds as if we only are
     % interested in the reduced amount of conditions
     % However, we have stored important vectors so that we know which
     % subject has which condition for the 2nd level
-   
+
     if isfield(analysis,'f_con_names') && isfield(analysis,'f_con')
         f_con             = analysis.f_con;
         f_con_names       = analysis.f_con_names;
@@ -474,25 +491,25 @@ for sub = 1:n_subs
         f_con             = [];
         f_con_names       = [];
     end
-    
+
     for run = 1:n_run
         func_dir = spm_file(epifiles{run},'path');
-        
+
         % then get the nuisance vectors (movement, wm, csf etc)
         if bs == 1
             fm        = spm_file(epifiles{run},'prefix','rp_ba','ext','.txt');
         else
-            fm        = spm_file(epifiles{run},'prefix','rp_a','ext','.txt');
+            fm        = epi_file(epifiles{run},vars,'rp'); % rp_<P><epi>.txt of the realignment (P: see epi_prefix)
         end
         movement  = normit(load(char(fm)));
         movement  = movement(scan_range{run}(1):scan_range{run}(2),:); %cut
-        
+
         mov_final     = normit(movement);
         mov_final_d   = diff(mov_final);
         mov_final_d   = normit([mov_final_d(1,:); mov_final_d]);
         mov_final_2   = normit(mov_final.^2);
         mov_final_d_2 = normit(mov_final_d.^2);
-        
+
         all_nuis{run} = [];
         % now assemble confounds according to the noise_corr string
         if strfind(noise_corr,'mov6')
@@ -500,9 +517,9 @@ for sub = 1:n_subs
         elseif strfind(noise_corr,'mov24')
             all_nuis{run} = [all_nuis{run} mov_final mov_final_2 mov_final_d mov_final_d_2];
         end
-        
+
         % other nuisance variables
-        
+
         if strfind(noise_corr,'physio')
             physio_noise_f = char(spm_file(epifiles{run},'prefix','physio_','ext','.txt'));
             if exist(physio_noise_f,'file')
@@ -511,83 +528,85 @@ for sub = 1:n_subs
                 all_nuis{run} = [all_nuis{run} normit(physio_noise)];
             end
         end
-        
+
         if strfind(noise_corr,'other')
             other_f = char(spm_file(epifiles{run},'prefix','other_','ext','.mat'));
             if exist(other_f,'file')
                 other_cov = load(other_f);
-                other_cov  = other_cov(scan_range{run}(1):scan_range{run}(2),:); %cut                
+                other_cov  = other_cov(scan_range{run}(1):scan_range{run}(2),:); %cut
                 all_nuis{run} = [all_nuis{run} normit(other_cov.other)];
             end
         end
-        
+
         if strfind(noise_corr,'wm')
-            seg_noise_f = char(spm_file(epifiles{run},'prefix','noise_wm_csf_ra','ext','.mat'));
+            seg_noise_f = char(epi_file(epifiles{run},vars,'noise_wm_csf')); % noise_wm_csf_r<P><epi>.mat (sbp_create_noise)
             if exist(seg_noise_f,'file')
                 seg_noise = load(seg_noise_f);
-                seg_noise_wm  = normit(seg_noise.segment(1).data(scan_range{run}(1):scan_range{run}(2),:)); %cut                
+                seg_noise_wm  = normit(seg_noise.segment(1).data(scan_range{run}(1):scan_range{run}(2),:)); %cut
                 all_nuis{run} = [all_nuis{run} seg_noise_wm];
             end
         end
-        
+
         if strfind(noise_corr,'csf')
             if bs == 1
                 seg_noise_bs_f = char(spm_file(epifiles{run},'prefix','noise_csf_bra','ext','.mat'));
                 if exist(seg_noise_bs_f,'file')
                     seg_noise_bs = load(seg_noise_bs_f);
-                    seg_noise_bs_csf  = normit(seg_noise_bs.segment(2).data(scan_range{run}(1):scan_range{run}(2),:)); %cut                                    
+                    seg_noise_bs_csf  = normit(seg_noise_bs.segment(2).data(scan_range{run}(1):scan_range{run}(2),:)); %cut
                     all_nuis{run} = [all_nuis{run} seg_noise_bs_csf];
                 end
             else
-                seg_noise_f = char(spm_file(epifiles{run},'prefix','noise_wm_csf_ra','ext','.mat'));
+                seg_noise_f = char(epi_file(epifiles{run},vars,'noise_wm_csf'));
                 if exist(seg_noise_f,'file')
                     seg_noise = load(seg_noise_f);
-                    seg_noise_csf  = normit(seg_noise.segment(2).data(scan_range{run}(1):scan_range{run}(2),:)); %cut                                    
+                    seg_noise_csf = normit(seg_noise.segment(2).data(scan_range{run}(1):scan_range{run}(2),:)); %cut
                     all_nuis{run} = [all_nuis{run} seg_noise_csf];
                 end
             end
         end
-        
+
         if strfind(noise_corr,'roi')
-            roi_noise_f = char(spm_file(epifiles{run},'prefix','noise_roi_ra','ext','.mat'));
+            roi_noise_f = char(epi_file(epifiles{run},vars,'noise_roi')); % noise_roi_r<P><epi>.mat (sbp_create_noise)
             if exist(roi_noise_f,'file')
                 roi_noise = load(roi_noise_f);
-                %cut
-                noise_roi_1  = normit(roi_noise.roi(1).data(scan_range{run}(1):scan_range{run}(2),:)); %cut                                    
-                noise_roi_2  = normit(roi_noise.roi(2).data(scan_range{run}(1):scan_range{run}(2),:)); %cut                                    
-                all_nuis{run} = [all_nuis{run} noise_roi_1];
-                all_nuis{run} = [all_nuis{run} noise_roi_2];
+                for i_roi = 1:2   % ROIs outside the field of view (slab) are empty, see extract_roi
+                    if isempty(roi_noise.roi(i_roi).data)
+                        warning('sub %d run %d: ROI %d has no data (outside the field of view), no regressors for it',sub_id,run,i_roi);
+                    else
+                        all_nuis{run} = [all_nuis{run} normit(roi_noise.roi(i_roi).data(scan_range{run}(1):scan_range{run}(2),:))]; %cut
+                    end
+                end
             end
         end
-        
+
         if strfind(noise_corr,'movnoise')
-            mov_noise_f = char(spm_file(epifiles{run},'prefix','noise_mov_ra','ext','.mat'));
+            mov_noise_f = char(epi_file(epifiles{run},vars,'noise_mov')); % noise_mov_r<P><epi>.mat (qc/check_movement)
             if exist(mov_noise_f,'file')
                 mov_noise = load(mov_noise_f);
-                mov_noise_1  = normit(mov_noise.mov_reg(scan_range{run}(1):scan_range{run}(2),:)); %cut                                    
+                mov_noise_1  = normit(mov_noise.mov_reg(scan_range{run}(1):scan_range{run}(2),:)); %cut
                 all_nuis{run} = [all_nuis{run} mov_noise_1];
             end
         end
-        
+
         n_nuis         = size(all_nuis{run},2);
         z{run}         = zeros(1,n_nuis); % handy for later contrast def
-        
+
         % now select epis for analysis
         if bs == 1
             scans = spm_select('ExtFPlist', func_dir,spm_file(spm_file(epifiles{run},'filename'),'prefix','^bra'),Inf);
         else
-            scans = spm_select('ExtFPlist', func_dir,spm_file(spm_file(epifiles{run},'filename'),'prefix','^ra'),Inf);
+            scans = spm_select('ExtFPlist', func_dir,spm_file(spm_file(epifiles{run},'filename'),'prefix',['^' analysis.prefix]),Inf);
         end
-        
-        scans  = scans(scan_range{run}(1):scan_range{run}(2),:); %cut    
+
+        scans  = scans(scan_range{run}(1):scan_range{run}(2),:); %cut
         % create vector of number of scans for possible concatenation
         scan_vec(run) = size(scans,1);
-        
+
         template.spm.stats.fmri_spec.sess(run).scans = cellstr(scans);
         template.spm.stats.fmri_spec.sess(run).multi = {''};
         template.spm.stats.fmri_spec.sess(run).multi_reg = {''};
         template.spm.stats.fmri_spec.sess(run).hpf       = analysis.hpf;
-        
+
         x = spm_load(tsvfiles{run}); % load onset *.tsv file; analysis.events allows different tsv files
         if isnumeric(x.trial_type) % the rare case that all conditions are numbers...
             x.trial_type = strtrim(cellstr(num2str(x.trial_type)));
@@ -596,15 +615,15 @@ for sub = 1:n_subs
         for ii=1:numel(cond_names)
             t_ind = find(strcmp(x.trial_type,cond_names(ii)));
             if ~isempty(t_ind) || (concatenate == 1)% allow empty in some runs when concatenate, bc other runs have the condition
-                cond_use{run} = [cond_use{run} ii]; 
+                cond_use{run} = [cond_use{run} ii];
                 RES(cnt).name      = cond_names{ii};
                 RES(cnt).onset     = (x.onset(t_ind)')./TR + shift; % times in tsv files are in seconds according to BIDS
-                RES(cnt).onset     = RES(cnt).onset - (scan_range{run}(1) - 1); %correct for cuts                    
+                RES(cnt).onset     = RES(cnt).onset - (scan_range{run}(1) - 1); %correct for cuts
                 RES(cnt).duration  = (x.duration(t_ind)')./TR;
                 if ana == 1 % FIR always has duration of 0
                     RES(cnt).duration  = zeros(size(x.duration(t_ind)'));
                 end
-                
+
                 % now add parametric regressors
                 RES(cnt).orth = 0; % no orthogonalization
                 for pm = 1:numel(p_mod{ii})
@@ -636,7 +655,7 @@ for sub = 1:n_subs
             RES_LSA(j).onset      = all(j,1);
             RES_LSA(j).duration   = all(j,3);
         end
-        
+
         % now put RES or RES_LSA in batch structure
         if ana == 1 || ana == 2 % FIR or HRF
             template.spm.stats.fmri_spec.sess(run).cond = RES;
@@ -647,10 +666,10 @@ for sub = 1:n_subs
                 cond_use{run} = cond_use{run} + max(cond_use{run-1});
             end
         end
-        
+
         %template.spm.stats.fmri_spec.sess(run).regress = []; %so it exists
         % --> this seems to give new problems ???
-        
+
         for nuis = 1:n_nuis % add nuisance variables to batch
             template.spm.stats.fmri_spec.sess(run).regress(nuis) = struct('name', cellstr(num2str(nuis)), 'val', all_nuis{run}(:,nuis));
         end
@@ -665,7 +684,7 @@ for sub = 1:n_subs
         end
     end
     lss_ind = [lss_ind ones(2,n_run).*NaN];  % add constants
-    
+
     template_wls.spm.tools.rwls.fmri_rwls_spec.sess = template.spm.stats.fmri_spec.sess;
     %% do concatenation
     if concatenate
@@ -673,14 +692,14 @@ for sub = 1:n_subs
         c_scan_vec = cumsum(scan_vec);
         new_t_wls  = template_wls; % duplicate template
         new_t      = template;
-        
+
         new_t.spm.stats.fmri_spec.sess(2:end) = []; % get rid of original runs 2..n
         new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(2:end) = []; % get rid of original runs 2..n
         for run = 2:n_run % go through these runs to put everything in run 1
             % first do scans
             new_t.spm.stats.fmri_spec.sess(1).scans = [new_t.spm.stats.fmri_spec.sess(1).scans;template.spm.stats.fmri_spec.sess(run).scans];
             new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).scans = [new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).scans;template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).scans];
-            
+
             % now do nuisance variables (e.g. motion etc)
             for re = 1:numel(new_t.spm.stats.fmri_spec.sess(1).regress)
                 if numel(new_t.spm.stats.fmri_spec.sess(1).regress) == numel(template.spm.stats.fmri_spec.sess(run).regress)
@@ -697,7 +716,7 @@ for sub = 1:n_subs
                     new_t.spm.stats.fmri_spec.sess(1).cond(end+1).name   = template.spm.stats.fmri_spec.sess(run).cond(c).name; %end is now end+1 ... be careful
                     new_t.spm.stats.fmri_spec.sess(1).cond(end).onset    = template.spm.stats.fmri_spec.sess(run).cond(c).onset + c_scan_vec(run-1);
                     new_t.spm.stats.fmri_spec.sess(1).cond(end).duration = template.spm.stats.fmri_spec.sess(run).cond(c).duration;
-                    
+
                     new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(end+1).name   = template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).cond(c).name; %end is now end+1 ... be careful
                     new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(end).onset    = template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).cond(c).onset + c_scan_vec(run-1);
                     new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(end).duration = template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).cond(c).duration;
@@ -705,7 +724,7 @@ for sub = 1:n_subs
                 else
                     new_t.spm.stats.fmri_spec.sess(1).cond(c).onset     = [new_t.spm.stats.fmri_spec.sess(1).cond(c).onset template.spm.stats.fmri_spec.sess(run).cond(c).onset + c_scan_vec(run-1)];
                     new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).onset     = [new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).onset template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).cond(c).onset + c_scan_vec(run-1)];
-                    
+
                     new_t.spm.stats.fmri_spec.sess(1).cond(c).duration  = [new_t.spm.stats.fmri_spec.sess(1).cond(c).duration template.spm.stats.fmri_spec.sess(run).cond(c).duration];
                     new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).duration  = [new_t_wls.spm.tools.rwls.fmri_rwls_spec.sess(1).cond(c).duration template_wls.spm.tools.rwls.fmri_rwls_spec.sess(run).cond(c).duration];
                     if isfield(new_t.spm.stats.fmri_spec.sess(1).cond(c),'pmod')
@@ -726,26 +745,24 @@ for sub = 1:n_subs
         template     = new_t; % replace template
         z            = z(1); % adjust nuisance counter
     end
-    
+
     if do_model
 
         skip_model = false;
 
         % In the ppi context, this is already a first check whether the base analysis has already been
-        % specified and estimated. 
+        % specified and estimated.
         if exist(a_dir,'dir') == 7
 
-
             if do_ppi
-                
-                
+
                 % Default behavior in a PPI is that the base model will be specified and estimated,
                 % unless it is identical in the new analysis (e.g. same model but different PPI seed).
                 % In this case, we can skip model specification and estimation (i.e., set do_model and do_est to false).
 
                 % TODO: maybe some further checks
-                % Right now we only check for the info given by the directory name 
-                % (i.e., same task, same model type, same nuisance correction, same HRF model, same concatenation option). 
+                % Right now we only check for the info given by the directory name
+                % (i.e., same task, same model type, same nuisance correction, same HRF model, same concatenation option).
                 % Also we check for the name of the tsv file (but not for their content)-
                 % We might want to think for some further checks here.
 
@@ -754,7 +771,7 @@ for sub = 1:n_subs
                     warning('Missing SPM.mat file for sub-%02d. Please manually delete the directory run the analysis for this subject alone first to create the base model.', sub_id);
                     return;  % Exit the entire function
                 end
-                
+
                 % Check whether event files exist and have the correct name
                 for ts = 1:numel(tsvfiles)
                     old_tsv = fullfile(a_dir, spm_file(tsvfiles{ts}, 'filename'));
@@ -770,15 +787,15 @@ for sub = 1:n_subs
 
                     end
                 end
-                
-                
+
+
 
                 if ~model_changed % i.e., base directory exists and event files are the same
                     fprintf('\nBase model for sub-%02d unchanged, reusing existing model\n\n', sub_id);
                     skip_model = true;
                     template = [];
                 end
-                    
+
             else
                 % Non-PPI analysis: original interactive behavior for existing directories
                 str = {[a_dir ' : contains SPM estimation files']};
@@ -787,7 +804,7 @@ for sub = 1:n_subs
                 else
                     ret = spm_input(str,1,'bd','abort mission|del dir|del ALL dirs',[0,1,2],1);
                 end
-                
+
                 if ret == 0
                     spm('Pointer','Arrow')
                     return
@@ -808,12 +825,9 @@ for sub = 1:n_subs
                     copyfile(tsvfiles{ts},a_dir);
                 end
             end
-       
-
-
 
         else % the analysis directory does not exist yet
-             % create analysis directory and copy this script and get_study_specs to it
+            % create analysis directory and copy this script and get_study_specs to it
 
             if do_ppi
                 fprintf('Creating base model for PPI analysis for sub-%02d\n', sub_id);
@@ -829,10 +843,10 @@ for sub = 1:n_subs
 
         end
 
-        % Delete the final ppi_dir if it exisits
-       % if do_ppi && exist(ppi_dir, 'dir') == 7
-       %     rmdir(ppi_dir, 's');
-       % end
+        % Delete the final ppi_dir if it exists
+        % if do_ppi && exist(ppi_dir, 'dir') == 7
+        %     rmdir(ppi_dir, 's');
+        % end
 
 
         % finalize fmri specification batch
@@ -840,14 +854,14 @@ for sub = 1:n_subs
         if do_model && ~skip_model
             template.spm.stats.fmri_spec.dir = {[a_dir]};
             template_wls.spm.tools.rwls.fmri_rwls_spec.dir = template.spm.stats.fmri_spec.dir;
-            
+
             if wls % decide whether we do WLS or OLS
                 matlabbatch{mbi,sub} = template_wls;
             else
                 matlabbatch{mbi,sub} = template;
             end
             mbi = mbi + 1;
-            
+
             if concatenate
                 matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
                 matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = scan_vec;
@@ -856,7 +870,6 @@ for sub = 1:n_subs
                 mbi = mbi + 1;
             end
         end
-
     end
 
     if do_est && ~skip_model
@@ -870,7 +883,6 @@ for sub = 1:n_subs
         mbi = mbi + 1;
     end
 
-
     if do_lss
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = lss_ind;
@@ -878,7 +890,7 @@ for sub = 1:n_subs
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'spm_spm_lss';
         mbi = mbi + 1;
     end
-    
+
     if do_vasa
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
@@ -901,16 +913,16 @@ for sub = 1:n_subs
         if ~skip_model
             % For subjects creating new base models: create contrasts first
             existing_ppi_conds = ppi_specs.conds(any_cond_exist(ppi_specs.conds));
-            n_ppi_conds = length(existing_ppi_conds); 
+            n_ppi_conds = length(existing_ppi_conds);
             [glm_f_vec, ~]   = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, false, n_ppi_conds, p_mod, ana);
-    
+
             % Create F-contrast
             matlabbatch{mbi, sub}.spm.stats.con.spmmat = {fullfile(a_dir,'SPM.mat')};
             matlabbatch{mbi, sub}.spm.stats.con.delete = 1;
             matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.name  = 'eff_of_int';
             matlabbatch{mbi, sub}.spm.stats.con.consess{1}.fcon.convec = {glm_f_vec};
-            
-            if isfield(ppi_specs, 'tcon') 
+
+            if isfield(ppi_specs, 'tcon')
                 matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.name = ppi_specs.tcon.name;
                 matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.convec = ppi_specs.tcon.vec;
                 matlabbatch{mbi, sub}.spm.stats.con.consess{2}.tcon.sessrep = 'none';
@@ -918,29 +930,29 @@ for sub = 1:n_subs
             mbi = mbi + 1;
 
         end
-        
+
         % PPI creation for ALL subjects (both new and existing base models)
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.string = fullfile(a_dir,'SPM.mat');
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{2}.evaluated = ppi_specs;
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{3}.string = char(fullfile(mean_dir,'y_epi_2_template.nii'));
-        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{4}.string = char(spm_file(m_epi,'prefix','wmeana'));
+        matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.inputs{4}.string = char(epi_file(m_epi,vars,'wmean')); % wmean<P><epi> (sbp_warp)
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.outputs = {};
         matlabbatch{mbi,sub}.cfg_basicio.run_ops.call_matlab.fun = 'sbp_ppi';
         mbi = mbi + 1;
-    
+
     end
-    
-    
+
+
     %% now prepare contrasts
     template = [];
-    
+
     % ppi specific overwrites
     if do_ppi
         a_dir           = ppi_dir;
 
         % set up ppi regressors (accounting for missing conditions)
         existing_ppi_conds = ppi_specs.conds(any_cond_exist(ppi_specs.conds));
-        n_ppi_conds = length(existing_ppi_conds); 
+        n_ppi_conds = length(existing_ppi_conds);
         n_ppi_regressors = n_ppi_conds*2 + 1;
         n_cond = n_ppi_regressors;
 
@@ -949,7 +961,7 @@ for sub = 1:n_subs
         % Original model: [PSY1 PSY2 PSY3 PSY4 SEED PPI1 PPI2 PPI3 PPI4]
         % i_reg:          [ 1    1    1    0    1    1    1    1    0  ]
         i_reg = [];
-        
+
         % First PSY regressors
         for i = 1:numel(ppi_specs.conds)
             i_reg = [i_reg any_cond_exist(ppi_specs.conds(i))];
@@ -993,25 +1005,25 @@ for sub = 1:n_subs
             strcat('PSY_', ppi_cond_names(any_cond_exist(ppi_specs.conds))), ...
             {sprintf('Y_%s', ppi_specs.name)}, ...
             strcat('PPI_', ppi_cond_names(any_cond_exist(ppi_specs.conds)))
-        ];
+            ];
 
     else
         a_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), anadirname);
         n_ppi_conds = 0; % ensuring backwards compatibility
 
-    end 
-    
+    end
+
 
     % create f-contrast
     template.spm.stats.con.spmmat = {fullfile(a_dir,'SPM.mat')};
     template.spm.stats.con.delete = 1;
     fco = 1; % counter for f-contrasts
     template.spm.stats.con.consess{fco}.fcon.name  = 'eff_of_int';
-    
+
     if (ana == 3) & (concatenate == 1)
         cond_use{1} = 1:numel(new_t.spm.stats.fmri_spec.sess(1).cond);
     end
-    
+
     [f_vec, n_reg] = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, do_ppi, n_ppi_conds, p_mod, ana);
     template.spm.stats.con.consess{fco}.fcon.convec = {f_vec};
 
@@ -1022,7 +1034,7 @@ for sub = 1:n_subs
     %     n_reg(pp) = 1+numel(p_mod{pp});
     %     i_reg     = [i_reg repmat(pp,1,n_reg(pp))];
     % end
-    
+
     % if ana == 3 % f-con for LSA needs adjustment
     %     max_cond = 0;
     %     for run = 1:n_run
@@ -1031,10 +1043,10 @@ for sub = 1:n_subs
     %     i_reg = 1:max_cond;
     %     n_reg = ones(size(i_reg));
     % end
-    
+
 
     % now do the simple cons for 2nd level anova
-    % simply go through the eoi (f_vec) li-+ne by line and correct by # of occurrence
+    % simply go through the eoi (f_vec) line by line and correct by # of occurrence
     ind_t = 1;ind_b = 1;
     %    if warp_s_con || warp_a_con
     simple_con_ind{sub} = [];simple_beta_ind{sub} = [];
@@ -1052,7 +1064,7 @@ for sub = 1:n_subs
                 simple_beta_ind{sub} = [simple_beta_ind{sub} ind_b];
                 simple_con(ind_b,:) = f_vec(ind_b,:)./sum(f_vec(ind_b,:)); % scale to 1
                 ind_b = ind_b + 1;
-                
+
                 if warp_s_con
                     all_t_con_names{ind_t}  = [label '_' num2str(i_fir)];
                     simple_con_ind{sub}  = [simple_con_ind{sub} ind_t+fco];
@@ -1064,14 +1076,13 @@ for sub = 1:n_subs
             end
         end
     end
-    %    end
-    
-    % additional t-constrasts as specified in get_study_specs, these will also be used as one sample t-tests
+
+    % additional t-contrasts as specified in get_study_specs, these will also be used as one sample t-tests
     if ~isempty(t_con)
-%         if concatenate
-%             ind = 1; % reset counter as we have not created those t-cons
-%             all_t_con_names = [];
-%         end
+        %         if concatenate
+        %             ind = 1; % reset counter as we have not created those t-cons
+        %             all_t_con_names = [];
+        %         end
         add_con_ind = [];
         for co = 1:numel(t_con_names)
             template.spm.stats.con.consess{ind_t+fco}.tcon.name    = [t_con_names{co}];
@@ -1082,7 +1093,7 @@ for sub = 1:n_subs
             ind_t = ind_t + 1;
         end
     end
-    
+
     if do_cons
         % get old con files to delete them *con* *spmT* *spmF* *ess*
         old_con_files = [''];
@@ -1092,28 +1103,29 @@ for sub = 1:n_subs
         matlabbatch{mbi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = cellstr(old_con_files);
         matlabbatch{mbi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.delete = false; % delete all the stuff we do not need anymore
         mbi = mbi + 1;
-        
+
         matlabbatch{mbi,sub} = template; % now add constrasts to batch
         mbi = mbi + 1;
     end
-    
+
     % prepare_warp
     template    = [];
     warp_files  = '';
-    if warp_a_con || warp_s_con        
+    if warp_a_con || warp_s_con
         for co = 1:size(all_t_con_names,2)
             warp_files(co,:) = [a_dir filesep sprintf(con_temp,co+fco)]; % need to take f cons into account
         end
     end
-    
+
     if warp_beta
         for be = find(sum(f_vec)) % these are all the beta files that are relevant
             warp_files = strvcat(warp_files,[a_dir filesep sprintf(beta_temp,be)]);
         end
     end
-    
+
     warp_files = strvcat(warp_files,fullfile(a_dir,'mask.nii')); % lets also warp the mask
-    
+
+    % do vasa correction
     if do_correct_vasa
         vasa_file = fullfile(a_dir,'vasa_res.nii');
         for co = 1:size(warp_files,1)
@@ -1131,10 +1143,7 @@ for sub = 1:n_subs
         end
     end
 
-    
-
     %% Warping and smoothing
-
     if do_warp
         % using nlin coreg + DARTEL or vdm corrected EPIs
         matlabbatch{mbi,sub}.spm.util.defs.comp{1}.def = fullfile(mean_dir,'y_epi_2_template.nii');
@@ -1150,7 +1159,7 @@ for sub = 1:n_subs
         matlabbatch{mbi,sub}.spm.util.defs.out{1}.pull.prefix = 'w';
         mbi = mbi + 1;
     end
-    
+
     if do_smooth
         if analysis.use_vasa == 1
             matlabbatch{mbi,sub}.spm.spatial.smooth.data   = cellstr(spm_file(warp_files, 'prefix','wv'));
@@ -1161,28 +1170,26 @@ for sub = 1:n_subs
         matlabbatch{mbi,sub}.spm.spatial.smooth.prefix = ['s' sm_str];
         mbi = mbi + 1;
     end
-
-    
 end
 
 % Check if model changed and exit if needed
 % ppi-specific
-% we need this cleanup section here bc it can be  that the model has changed
-% for e.g. sub-02 but not for sub-01. However, to avoid corrupted analyes, we always
+% we need this cleanup section here bc it can be that the model has changed
+% for e.g. sub-02 but not for sub-01. However, to avoid corrupted analyses, we always
 % want to delete all directories if the model has changed for any subject
 
 if do_ppi
     if model_changed
-        warning('\nModel changed for some subjects. You analysis may be corrupted\n');
+        warning('\nModel changed for some subjects. Your analysis may be corrupted\n');
 
         % Ask user what to do with the directories
         str = {'Model changed for some subjects. You analysis may be corrupted.'; ...
-               'Please select whether you want to abort the analysis, delete all temp directories and re-run the analysis,'; ...
-               'or abort and manually delete the temp directories and re-run'};
+            'Please select whether you want to abort the analysis, delete all temp directories and re-run the analysis,'; ...
+            'or abort and manually delete the temp directories and re-run'};
 
 
         ret = spm_input(str,1,'bd','abort mission|del all dirs',[0,1],1);
-        
+
         if ret == 0
             fprintf('Analysis aborted. You may need to manually delete some temp directories.\n');
             return;
@@ -1192,7 +1199,7 @@ if do_ppi
             for cleanup_sub = 1:n_subs
                 sub_id = all_sub_ids(cleanup_sub);
                 temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', sub_id), sprintf('TMP_%s', anadirname));
-                
+
                 if exist(temp_dir,'dir')
                     rmdir(temp_dir,'s');
                     fprintf('Deleted: %s\n', temp_dir);
@@ -1207,15 +1214,8 @@ end
 % end
 if ~isempty(matlabbatch)
     % run matlabbatch
-
-    n_procs = n_subs; % to not block to many cores on the server
-    
-    if n_procs > vars.max_procs
-        n_procs = vars.max_procs;
-    end
-    
     if parallel == 1
-        run_spm_parallel(matlabbatch, n_procs);
+        run_spm_parallel(matlabbatch, vars.max_procs);
     else
         run_local(matlabbatch);
     end
@@ -1263,10 +1263,10 @@ if do_one_t
         out_dir = strrep(out_dir,'>','_bt_'); % these chars are not allowed in directory names ...
         out_dir = strrep(out_dir,'<','_st_');
         mkdir(out_dir);
-        
+
         matlabbatch = [];
         allfiles    = [];
-        
+
         for su = 1:numel(groups{1})
             name        = sprintf('sub-%02d',groups{1}(su));
             a_dir       = fullfile(path.firstlevelDir, name, anadirname);
@@ -1275,7 +1275,7 @@ if do_one_t
             if warp_a_con
                 swcon_file = fullfile(a_dir, sprintf(con_temp,pruned_add_con_ind(co)));
             end
-            
+
             if analysis.use_vasa == 1
                 swcon_file = spm_file(swcon_file,'prefix',sprintf('%swv',s_string));
             else
@@ -1283,19 +1283,19 @@ if do_one_t
             end
             allfiles    = strvcat(allfiles,swcon_file);
         end
-        
+
         mbi = 1;
         matlabbatch{mbi}.spm.stats.factorial_design.dir = {out_dir};
         matlabbatch{mbi}.spm.stats.factorial_design.des.t1.scans = cellstr(allfiles);
-        
+
         matlabbatch{mbi}.spm.stats.factorial_design.des.pt.gmsca  = 0;
         matlabbatch{mbi}.spm.stats.factorial_design.des.pt.ancova = 0;
-        
-        
+
+
         matlabbatch{mbi}.spm.stats.factorial_design.multi_cov = struct('files', {}, 'iCFI', {}, 'iCC', {});
         matlabbatch{mbi}.spm.stats.factorial_design.masking.tm.tm_none = 1;
         matlabbatch{mbi}.spm.stats.factorial_design.masking.im = 1;
-        
+
         if bs == 1
             matlabbatch{mbi}.spm.stats.factorial_design.masking.em = {fullfile(path.templateDir, 'brainstem_mask.nii')};
         else
@@ -1305,27 +1305,27 @@ if do_one_t
         matlabbatch{mbi}.spm.stats.factorial_design.globalm.gmsca.gmsca_no = 1;
         matlabbatch{mbi}.spm.stats.factorial_design.globalm.glonorm = 1;
         mbi = mbi + 1;
-        
+
         matlabbatch{mbi}.spm.stats.fmri_est.spmmat = {fullfile(out_dir,'SPM.mat')};
         matlabbatch{mbi}.spm.stats.fmri_est.method.Classical = 1;
         mbi = mbi + 1;
-        
+
         matlabbatch{mbi}.spm.stats.con.spmmat = {fullfile(out_dir,'SPM.mat')};
         matlabbatch{mbi}.spm.stats.con.delete = 1;
-        
+
         co = 1;
         matlabbatch{mbi}.spm.stats.con.consess{co}.tcon.name    = 'pos';
         matlabbatch{mbi}.spm.stats.con.consess{co}.tcon.convec  = [1];
         matlabbatch{mbi}.spm.stats.con.consess{co}.tcon.sessrep = 'none';
         co = co + 1; %increment by 1
-        
+
         matlabbatch{mbi}.spm.stats.con.consess{co}.tcon.name    = 'neg';
         matlabbatch{mbi}.spm.stats.con.consess{co}.tcon.convec  = [-1];
         matlabbatch{mbi}.spm.stats.con.consess{co}.tcon.sessrep = 'none';
         co = co + 1; %increment by 1
-        
+
         mbi = mbi + 1;
-        
+
 
         copyfile(which(mfilename),fullfile(out_dir,spm_file(spm_file(which(mfilename),'filename'),'ext','bak'))); % copy this file into analysis directory as *.bak
         copyfile(which('get_study_specs'),fullfile(out_dir,spm_file(spm_file(which('get_study_specs'),'filename'),'ext','bak'))); % and copy this file as it contains everything necessary to repeat the analysis
@@ -1336,9 +1336,9 @@ end
 
 if do_fact || do_fact_con
     addon   = [addon 'FACT'];
-    
+
     out_dir = fullfile(path.secondlevelDir,[addon '_' anadirname '_' sm_str]);
-    
+
     matlabbatch = [];
     matlabbatch{1}.spm.stats.factorial_design.dir = {out_dir};
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(1).name = 'GROUP';
@@ -1356,17 +1356,12 @@ if do_fact || do_fact_con
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).variance = analysis.fact_var;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).gmsca = 0;
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).ancova = 0;
-    % if ana == 1  % FIR
-    %     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(2).variance = 0;
-    %     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).dept = 0; %too many ...
-    %     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fac(3).variance = 1;
-    % end
-    
+
     %GROUP SUBJECT DAY CONDITION
     allfiles  = [];
     imat      = [];
     inc_su = 1;
-    for gr = 1:size(groups,2) 
+    for gr = 1:size(groups,2)
         for su = 1:size(groups{gr},2)
             for co = 1:numel(conds_done{groups_ind{gr}(su)}) % conds_done contains all relevant regressors
                 name        = sprintf('sub-%02d',groups{gr}(su));
@@ -1391,28 +1386,28 @@ if do_fact || do_fact_con
             inc_su = inc_su + 1;
         end
     end
-    
+
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fsuball.specall.scans    = cellstr(allfiles);
     matlabbatch{1}.spm.stats.factorial_design.des.fblock.fsuball.specall.imatrix  = imat;
-    
-    
+
+
     if n_groups>1
         matlabbatch{1}.spm.stats.factorial_design.des.fblock.maininters{1}.inter.fnums  = [1 3]; %group by condition
     else
         matlabbatch{1}.spm.stats.factorial_design.des.fblock.maininters{1}.fmain.fnum  = [3]; % only conditions
     end
-    
+
     matlabbatch{1}.spm.stats.factorial_design.cov                  = struct('c', {}, 'cname', {}, 'iCFI', {}, 'iCC', {});
     matlabbatch{1}.spm.stats.factorial_design.multi_cov            = struct('files', {}, 'iCFI', {}, 'iCC', {});
     matlabbatch{1}.spm.stats.factorial_design.masking.tm.tm_none   = 1;
     matlabbatch{1}.spm.stats.factorial_design.masking.im           = 1;
-    
+
     if bs == 1
         matlabbatch{1}.spm.stats.factorial_design.masking.em = {fullfile(path.templateDir, 'brainstem_mask.nii')};
     else
         matlabbatch{1}.spm.stats.factorial_design.masking.em = {fullfile(path.templateDir, vars.groupMaskID)};
     end
-    
+
     matlabbatch{2}.spm.stats.fmri_est.spmmat = {fullfile(out_dir,'SPM.mat')};
     matlabbatch{2}.spm.stats.fmri_est.method.Classical = 1;
 end
@@ -1431,18 +1426,18 @@ if do_fact_con
     clear SPM; load(fullfile(out_dir,'SPM.mat')); %should exist by now
     matlabbatch{1}.spm.stats.con.spmmat = {fullfile(out_dir,'SPM.mat')};
     matlabbatch{1}.spm.stats.con.delete = 1;
-    
-    
+
+
     co = 1;
     matlabbatch{1}.spm.stats.con.consess{co}.fcon.name   = 'eff_of_int';
     Fc = spm_FcUtil('Set','F_iXO_Test','F','iX0',[],SPM.xX.X);
     matlabbatch{1}.spm.stats.con.consess{co}.fcon.convec = {Fc.c'};
     co = co + 1; %increment
-    
+
     %do F-contrasts
-    if ~do_ppi % hott fix bc we f contrasts are not yet implemented for ppi
+    if ~do_ppi % hot fix bc we f contrasts are not yet implemented for ppi
         for fc=1:numel(f_con_names)
-            matlabbatch{1}.spm.stats.con.consess{co}.fcon.name   = analysis.f_con_names{fc}; % we need the original 
+            matlabbatch{1}.spm.stats.con.consess{co}.fcon.name   = analysis.f_con_names{fc}; % we need the original
             matlabbatch{1}.spm.stats.con.consess{co}.fcon.convec = analysis.f_con{fc};
             co = co + 1; %increment
         end
@@ -1455,20 +1450,19 @@ if do_fact_con
 
     for gw = 1:numel(group_ana_names)
         for tc = 1:numel(analysis.t_con_names)
-            matlabbatch{1}.spm.stats.con.consess{co}.tcon.name    = [group_ana_names{gw} '_' analysis.t_con_names{tc}]; % we need the original 
-            matlabbatch{1}.spm.stats.con.consess{co}.tcon.convec  = [kron(group_weights(gw,:),analysis.t_con(tc,:))]; % we need the original 
+            matlabbatch{1}.spm.stats.con.consess{co}.tcon.name    = [group_ana_names{gw} '_' analysis.t_con_names{tc}]; % we need the original
+            matlabbatch{1}.spm.stats.con.consess{co}.tcon.convec  = [kron(group_weights(gw,:),analysis.t_con(tc,:))]; % we need the original
             matlabbatch{1}.spm.stats.con.consess{co}.tcon.sessrep = 'none';
             co = co + 1; %increment
         end
     end
-    
+
     run_local(matlabbatch);
 end
 
 end
 
 function run_local(matlabbatch)
-
 if size(matlabbatch,2) > 1 % we have multiple subjects
     matlabbatch = matlabbatch(:);
 end
@@ -1502,152 +1496,152 @@ end
 
 
 function [f_vec, n_reg] = create_f_vec(n_run, cond_use, n_base, n_nuis, n_o_run, is_ppi, n_ppi_conds, p_mod, ana)
-    
-    % construct the effects of int contrast across runs (complicated because some conds might be missing in some runs)
-    % get some helpful vectors first
-    i_reg = [];n_reg = [];
-    for pp=1:numel(p_mod)
-        n_reg(pp) = 1+numel(p_mod{pp});
-        i_reg     = [i_reg repmat(pp,1,n_reg(pp))];
-    end
-    
-    % Adjust for LSA if needed
-    if ana == 3 % f-con for LSA needs adjustment
-        max_cond = 0;
-        for run = 1:n_run
-            max_cond = max(max_cond, max(cond_use{run}));
-        end
-        i_reg = 1:max_cond;
-        n_reg = ones(size(i_reg));
-    end
-    
-    % actual contrast creation
-    if ~is_ppi
 
-        % Standard GLM F-contrast
-        f_vec = [];
-        for run = 1:n_run
-            cvec{run} = zeros(sum(n_reg));
-            for co = 1:numel(cond_use{run})
-                cvec{run} = cvec{run} + diag(i_reg==cond_use{run}(co));
-            end
-            cvec{run} = kron(cvec{run}, eye(n_base));
-            cvec{run}(:,find(~sum(cvec{run}))) = [];
-            f_vec = [f_vec cvec{run} zeros(size(cvec{run},1), n_nuis)];
-        end
-        f_vec = [f_vec zeros(size(cvec{run},1), n_o_run)];
-    else
-        % PPI F-contrast
-        n_ppi_regressors = n_ppi_conds*2 + 1;
-        f_vec = [eye(n_ppi_regressors) zeros(n_ppi_regressors, n_nuis+n_o_run)];
+% construct the effects of int contrast across runs (complicated because some conds might be missing in some runs)
+% get some helpful vectors first
+i_reg = [];n_reg = [];
+for pp=1:numel(p_mod)
+    n_reg(pp) = 1+numel(p_mod{pp});
+    i_reg     = [i_reg repmat(pp,1,n_reg(pp))];
+end
 
-        % n_reg is a ones vector with as many elements as conditions (+1
-        % for any pmod). This vector is used to iterate over the conditions in the
-        % second level. For the ppi we need to account for the fact that
-        % the number of regressors changes. For now, pmods are not
-        % supported (TODO)
-        n_reg = ones(1, n_ppi_regressors);
+% Adjust for LSA if needed
+if ana == 3 % f-con for LSA needs adjustment
+    max_cond = 0;
+    for run = 1:n_run
+        max_cond = max(max_cond, max(cond_use{run}));
     end
+    i_reg = 1:max_cond;
+    n_reg = ones(size(i_reg));
+end
+
+% actual contrast creation
+if ~is_ppi
+
+    % Standard GLM F-contrast
+    f_vec = [];
+    for run = 1:n_run
+        cvec{run} = zeros(sum(n_reg));
+        for co = 1:numel(cond_use{run})
+            cvec{run} = cvec{run} + diag(i_reg==cond_use{run}(co));
+        end
+        cvec{run} = kron(cvec{run}, eye(n_base));
+        cvec{run}(:,find(~sum(cvec{run}))) = [];
+        f_vec = [f_vec cvec{run} zeros(size(cvec{run},1), n_nuis)];
+    end
+    f_vec = [f_vec zeros(size(cvec{run},1), n_o_run)];
+else
+    % PPI F-contrast
+    n_ppi_regressors = n_ppi_conds*2 + 1;
+    f_vec = [eye(n_ppi_regressors) zeros(n_ppi_regressors, n_nuis+n_o_run)];
+
+    % n_reg is a ones vector with as many elements as conditions (+1
+    % for any pmod). This vector is used to iterate over the conditions in the
+    % second level. For the ppi we need to account for the fact that
+    % the number of regressors changes. For now, pmods are not
+    % supported (TODO)
+    n_reg = ones(1, n_ppi_regressors);
+end
 
 end
 
 
 function print_ppi_settings(ppi_specs, anadirname, cond_names)
-    fprintf('\nDoing a PPI with the following settings:\n');
-    
-    % Print ROI info based on definition type
-    switch ppi_specs.def
-        case 'sphere'
-            fprintf('\tROI definition:\t\tsphere, %dmm radius at [%d %d %d]\n', ...
-                ppi_specs.spec, ...
-                round(ppi_specs.xyz(1)), round(ppi_specs.xyz(2)), round(ppi_specs.xyz(3)));
-        case 'mask'
-            mask_name = ppi_specs.spec;
-            fprintf('\tROI definition:\t\tmask -- file path: "%s"\n', mask_name);
-        case 'box'
-            fprintf('\tROI definition:\t\tbox, %dmm at [%d %d %d]\n', ...
-                ppi_specs.spec, ...
-                round(ppi_specs.xyz(1)), round(ppi_specs.xyz(2)), round(ppi_specs.xyz(3)));
-        otherwise
-            fprintf('\tROI definition:\t\t%s\n', ppi_specs.def);
-    end
-    
-    fprintf('\tROI name:\t\t%s\n', ppi_specs.name);
-    fprintf('\tPPI smoothing kernel:\t%d\n', ppi_specs.skernel);
-    fprintf('\tDeconvolution:\t\t%s\n', mat2str(ppi_specs.deconvolute));
-    fprintf('\tAnalysis directory:\t"%s"\n', anadirname);
-    
-    % Print actual condition names
-    fprintf('\tPPI conditions:\t\t');
-    ppi_cond_names = cond_names(ppi_specs.conds);
-    fprintf('"%s" ', ppi_cond_names{:});
-    fprintf('\n');
-    
-    % Add tcon info if available
-    if isfield(ppi_specs, 'tcon') && isfield(ppi_specs.tcon, 'name')
-        fprintf('\t2-pass t-contrast:\t"%s"\n', ppi_specs.tcon.name);
-    end
-    fprintf('\n');
+fprintf('\nDoing a PPI with the following settings:\n');
+
+% Print ROI info based on definition type
+switch ppi_specs.def
+    case 'sphere'
+        fprintf('\tROI definition:\t\tsphere, %dmm radius at [%d %d %d]\n', ...
+            ppi_specs.spec, ...
+            round(ppi_specs.xyz(1)), round(ppi_specs.xyz(2)), round(ppi_specs.xyz(3)));
+    case 'mask'
+        mask_name = ppi_specs.spec;
+        fprintf('\tROI definition:\t\tmask -- file path: "%s"\n', mask_name);
+    case 'box'
+        fprintf('\tROI definition:\t\tbox, %dmm at [%d %d %d]\n', ...
+            ppi_specs.spec, ...
+            round(ppi_specs.xyz(1)), round(ppi_specs.xyz(2)), round(ppi_specs.xyz(3)));
+    otherwise
+        fprintf('\tROI definition:\t\t%s\n', ppi_specs.def);
+end
+
+fprintf('\tROI name:\t\t%s\n', ppi_specs.name);
+fprintf('\tPPI smoothing kernel:\t%d\n', ppi_specs.skernel);
+fprintf('\tDeconvolution:\t\t%s\n', mat2str(ppi_specs.deconvolute));
+fprintf('\tAnalysis directory:\t"%s"\n', anadirname);
+
+% Print actual condition names
+fprintf('\tPPI conditions:\t\t');
+ppi_cond_names = cond_names(ppi_specs.conds);
+fprintf('"%s" ', ppi_cond_names{:});
+fprintf('\n');
+
+% Add tcon info if available
+if isfield(ppi_specs, 'tcon') && isfield(ppi_specs.tcon, 'name')
+    fprintf('\t2-pass t-contrast:\t"%s"\n', ppi_specs.tcon.name);
+end
+fprintf('\n');
 end
 
 
 function consistent = check_ppi_consistency(all_sub_ids, path, anadirname)
-    % check_ppi_consistency - Check if PPI base models are consistent across subjects
-    %
-    % This function checks whether all subjects have base models for PPI analysis
-    % or if there's a mixed situation where some subjects have models and others don't.
-    % In this case, it advises the user to run the analysis in two steps since as of now
-    % our batch processing cannot handle mixed situations.
-    %
-    % Inputs:
-    %   all_sub_ids - Array of subject IDs to check
-    %   path        - Structure containing path information
-    %   anadirname  - Name of the analysis directory
-    %
-    % Outputs:
-    %   consistent          - Boolean flag (true if all subjects are consistent)
-    %   subjects_need_model - Array of subject IDs that need base models
-    %   subjects_have_model - Array of subject IDs that have existing base models
-    %
-    % Example:
-    %   [is_consistent, need_model, have_model] = check_ppi_consistency(all_sub_ids, path, anadirname);
-    
-        subjects_need_model = [];
-        subjects_have_model = [];
-        consistent = true;
-        
-        fprintf('Checking PPI base model consistency across subjects...\n');
-        
-        for check_sub = 1:length(all_sub_ids)
-            check_sub_id = all_sub_ids(check_sub);
-            temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', check_sub_id), sprintf('TMP_%s', anadirname));
-            
-            % Check if directory exists and contains SPM.mat
-            if exist(temp_dir, 'dir') && exist(fullfile(temp_dir, 'SPM.mat'), 'file')
-                subjects_have_model = [subjects_have_model check_sub_id];
-            else
-                subjects_need_model = [subjects_need_model check_sub_id];
-            end
-        end
-        
-        % If we have a mixed situation (some with models, some without)
-        if ~isempty(subjects_need_model) && ~isempty(subjects_have_model)
-            consistent = false;
-            
-            % Print warning message
-            fprintf('\n===========================================================\n');
-            fprintf('INCONSISTENT BASE MODELS DETECTED FOR PPI ANALYSIS\n\n');
-            fprintf('Some subjects have base models while others need them created.\n');
-            fprintf('This will lead to inconsistent processing batches.\n\n');
-            fprintf('Subjects needing base models: %s\n', mat2str(subjects_need_model));
-            fprintf('Subjects with existing models: %s\n', mat2str(subjects_have_model));
-            fprintf('\nPlease run the analysis in two steps:\n');
-            fprintf('1. First run for subjects needing base models: %s\n', mat2str(subjects_need_model));
-            fprintf('2. Then run for all subjects\n');
-            fprintf('===========================================================\n\n');
-        elseif ~isempty(subjects_have_model) && isempty(subjects_need_model)
-            fprintf('All subjects have existing base models - proceeding with PPI analysis.\n\n');
-        elseif ~isempty(subjects_need_model) && isempty(subjects_have_model)
-            fprintf('All subjects need base models created - proceeding with model creation.\n\n');
-        end
+% check_ppi_consistency - Check if PPI base models are consistent across subjects
+%
+% This function checks whether all subjects have base models for PPI analysis
+% or if there's a mixed situation where some subjects have models and others don't.
+% In this case, it advises the user to run the analysis in two steps since as of now
+% our batch processing cannot handle mixed situations.
+%
+% Inputs:
+%   all_sub_ids - Array of subject IDs to check
+%   path        - Structure containing path information
+%   anadirname  - Name of the analysis directory
+%
+% Outputs:
+%   consistent          - Boolean flag (true if all subjects are consistent)
+%   subjects_need_model - Array of subject IDs that need base models
+%   subjects_have_model - Array of subject IDs that have existing base models
+%
+% Example:
+%   [is_consistent, need_model, have_model] = check_ppi_consistency(all_sub_ids, path, anadirname);
+
+subjects_need_model = [];
+subjects_have_model = [];
+consistent = true;
+
+fprintf('Checking PPI base model consistency across subjects...\n');
+
+for check_sub = 1:length(all_sub_ids)
+    check_sub_id = all_sub_ids(check_sub);
+    temp_dir = fullfile(path.firstlevelDir, sprintf('sub-%02d', check_sub_id), sprintf('TMP_%s', anadirname));
+
+    % Check if directory exists and contains SPM.mat
+    if exist(temp_dir, 'dir') && exist(fullfile(temp_dir, 'SPM.mat'), 'file')
+        subjects_have_model = [subjects_have_model check_sub_id];
+    else
+        subjects_need_model = [subjects_need_model check_sub_id];
     end
+end
+
+% If we have a mixed situation (some with models, some without)
+if ~isempty(subjects_need_model) && ~isempty(subjects_have_model)
+    consistent = false;
+
+    % Print warning message
+    fprintf('\n===========================================================\n');
+    fprintf('INCONSISTENT BASE MODELS DETECTED FOR PPI ANALYSIS\n\n');
+    fprintf('Some subjects have base models while others need them created.\n');
+    fprintf('This will lead to inconsistent processing batches.\n\n');
+    fprintf('Subjects needing base models: %s\n', mat2str(subjects_need_model));
+    fprintf('Subjects with existing models: %s\n', mat2str(subjects_have_model));
+    fprintf('\nPlease run the analysis in two steps:\n');
+    fprintf('1. First run for subjects needing base models: %s\n', mat2str(subjects_need_model));
+    fprintf('2. Then run for all subjects\n');
+    fprintf('===========================================================\n\n');
+elseif ~isempty(subjects_have_model) && isempty(subjects_need_model)
+    fprintf('All subjects have existing base models - proceeding with PPI analysis.\n\n');
+elseif ~isempty(subjects_need_model) && isempty(subjects_have_model)
+    fprintf('All subjects need base models created - proceeding with model creation.\n\n');
+end
+end

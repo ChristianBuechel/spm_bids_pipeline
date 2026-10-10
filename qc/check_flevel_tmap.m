@@ -16,8 +16,7 @@ for sub = 1:nSubs
     tMapFile  = fullfile(workDir,tMapID);
     
     if ~exist(tMapFile,'file')
-        epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-        epi        = epi(1); % if there are brain and spinal, just take brain
+        epi        = get_ref_epi(BIDS,subIDs(sub));
         funcDir    = spm_file(epi,'path');
         flowFieldFile =  fullfile(funcDir,'y_epi_2_template.nii');
         

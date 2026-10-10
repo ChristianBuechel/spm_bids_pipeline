@@ -4,7 +4,6 @@ function create_tapas(all_sub_ids)
 n_subs          = length(all_sub_ids);
 BIDS            = spm_BIDS(path.preprocDir);
 nSess           = vars.nSess;
-nRuns           = vars.nRuns;
 taskName        = vars.task;
 TR              = vars.sliceTiming.tr;
 nSlices         = vars.sliceTiming.nslices;
@@ -13,8 +12,8 @@ for sub = 1:n_subs
     gi = 1;
 
     for ses = 1:nSess
-        for run = 1:nRuns
-            epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',all_sub_ids(sub)),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',taskName,'type','bold');
+        for run = get_run_numbers(BIDS,all_sub_ids(sub),ses)
+            epi = get_func_files(BIDS,all_sub_ids(sub),ses,run,'task',taskName);
             nScans = numel(spm_vol(epi{:,1}));
             % make batch input
             matlabbatch{gi,sub}.spm.tools.physio.save_dir = {''};

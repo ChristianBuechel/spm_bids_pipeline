@@ -17,14 +17,13 @@ n_subs       = length(all_sub_ids);
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     
-    epi        =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        =  epi(1); % if there are brain and spinal, just take brain
+    epi        =  get_ref_epi(BIDS,sub_id);
     mean_dir   = spm_file(epi,'path');
 
     cnt        = 1;
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi =  get_func_files(BIDS,sub_id,ses,run);
             if exist(char(spm_file(epi,'prefix','a','ext','.mat')),'file') %assume original realign
                 movefile(char(spm_file(epi,'prefix','a','ext','.mat')),char(spm_file(epi,'prefix','brain_a','ext','.mat')));
             end
@@ -60,9 +59,8 @@ for sub = 1:n_subs
     gi = gi + 1;
     
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi =  epi(1); % if there are brain and spinal, just take brain
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi =  get_func_files(BIDS,sub_id,ses,run);
             func_dir   = spm_file(epi,'path');
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(epi,'prefix','rp_a','ext','.txt'); %rename rp*txt files to brp*txt
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;

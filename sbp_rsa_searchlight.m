@@ -20,8 +20,7 @@ for sub=1:n_subs
     warp_files  = '';
     mbi         = 1;
     sub_id      = all_sub_ids(sub);
-    m_epi       = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');%ses 1, run 1
-    m_epi       = m_epi(1); % if there are brain and spinal, just take brain
+    m_epi       = get_ref_epi(BIDS,sub_id);%ses 1, run 1
     mean_dir    = spm_file(m_epi,'path'); %
     
     ana_dir    = fullfile(path.firstlevelDir,sprintf('sub-%2.2d',sub_id),rsa.ana_name);

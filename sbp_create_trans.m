@@ -1,26 +1,33 @@
-function create_trans(all_sub_ids)
-% function create_trans
-% creates all required spatial transformation matrices based on nonlinear coreg and dartel
+function sbp_create_trans(all_sub_ids)
+% function sbp_create_trans(all_sub_ids)
+% creates the deformation fields of the NLIN workflow (nonlinear coregistration + Dartel), written
+% to the func folder of the reference EPI (get_ref_epi):
+%   y_epi_2_T1.nii         from the nonlinear coregistration (y_mean<P><epi>), defined on the grid of the T1w
+%                          (used to get from the T1 to the EPI)
+%   y_epi_2_template.nii   the same combined with the Dartel flow field u_rc1<T1w> (EPI --> T1 --> template)
+% Needs y_mean<P><epi> (sbp_coreg_nlin_vaso_T1 or sbp_coreg_nlin) and u_rc1<T1w> (sbp_create_dartel).
+%   all_sub_ids   subject numbers, e.g. 1:5 (run in parallel if vars.parallel = 1)
 
 % resolve paths
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs        = length(all_sub_ids);
 
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
 
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); % if there are more than 1
+    struc_file = get_anat(BIDS,sub_id);
     anat_dir   = spm_file(struc_file,'path');
 
-    epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        =  epi(1); % if there are brain and spinal, just take brain
+    epi        = get_ref_epi(BIDS,sub_id);
     func_dir   = spm_file(epi,'path');
 
     u_rc1_file      = spm_file(struc_file,'prefix','u_rc1');    
-    nlin_coreg_file = spm_file(epi,'prefix','y_meana'); % def field from nlin coreg
-    %mean_nlin_reg   = spm_file(epi,'prefix','cmeana'); 
+    nlin_coreg_file = epi_file(epi,vars,'ymean'); % def field from nlin coreg (y_mean<P><epi>, see epi_prefix)
+    %mean_nlin_reg   = epi_file(epi,vars,'cmean');
             
     gi    = 1;
     

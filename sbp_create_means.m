@@ -1,11 +1,16 @@
-function create_means(all_sub_ids)
+function sbp_create_means(all_sub_ids)
 
-% function create_means(all_sub_ids)
-% creates mean skullstrip and mean epi
+% function sbp_create_means(all_sub_ids)
+% creates the mean of the skull-stripped T1 (wskull-strip-T1.nii), of the GM segment (wc1) and of the mean EPI
+% (wmean<P><epi>, P: see epi_prefix) in template space, and their variance images, over the subjects (path.preprocDir)
+% Needs sbp_warp for all subjects; at least 2 subjects
 
 
 % resolve paths
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs        = length(all_sub_ids);
 if n_subs < 2
@@ -18,17 +23,15 @@ all_wc1_files    = [];
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); % if there are more than 1
+    struc_file = get_anat(BIDS,sub_id);
     anat_dir   = spm_file(struc_file,'path');
 
-    epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        = epi(1); % if there are brain and spinal, just take brain
+    epi        = get_ref_epi(BIDS,sub_id);
     func_dir   = spm_file(epi,'path');
     
     wskull_file     = fullfile(anat_dir, 'wskull-strip-T1.nii');
-    wmean_file      = spm_file(epi,'prefix','wmeana');
-    wc1_file        = fullfile(anat_dir,sprintf('wc1sub-%02d_T1w.nii',sub_id));
+    wmean_file      = epi_file(epi,vars,'wmean'); % wmean<P><epi> (sbp_warp)
+    wc1_file        = spm_file(struc_file,'prefix','wc1');
     
     all_wskull_files  = [all_wskull_files;wskull_file];
     all_wmean_files   = [all_wmean_files;wmean_file];

@@ -18,12 +18,12 @@ run_parallel = 1;
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     
-    epi        =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
+    epi        =  get_ref_epi(BIDS,sub_id);
     
     cnt        = 1;
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi =  get_func_files(BIDS,sub_id,ses,run);
             if exist(char(spm_file(epi,'prefix','a','ext','.mat')),'file') %assume original realign
                 movefile(char(spm_file(epi,'prefix','a','ext','.mat')),char(spm_file(epi,'prefix','brain_a','ext','.mat')));
             end
@@ -56,8 +56,8 @@ for sub = 1:n_subs
     
     
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
-            epi =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+        for run = get_run_numbers(BIDS,sub_id,ses)
+            epi =  get_func_files(BIDS,sub_id,ses,run);
             
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(epi,'prefix','rp_a','ext','.txt'); %rename rp*txt files to brp*txt
             matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = func_dir;

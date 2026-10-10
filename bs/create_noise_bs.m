@@ -11,12 +11,10 @@ n_subs       = length(all_sub_ids);
 for sub = 1:n_subs
     sub_id    = all_sub_ids(sub);
     
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); % if there are more than 1
+    struc_file = get_anat(BIDS,sub_id);
     anat_dir   = spm_file(struc_file,'path');
     
-    epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        = epi(1); % if there are brain and spinal, just take brain
+    epi        = get_ref_epi(BIDS,sub_id);
     func_dir   = spm_file(epi,'path');
     
     bs_file    = fullfile(path.templateDir,vars.brainstemID);
@@ -32,9 +30,9 @@ for sub = 1:n_subs
     thresh = [0.1]; ex_var = 6; %low threshold as erosion takes away much of the bs
     gi = 1;
     for ses = 1:vars.nSess
-        for run = 1:vars.nRuns
+        for run = get_run_numbers(BIDS,sub_id,ses)
             fprintf('ses %d run %d\n',ses,run);
-            epi       =  spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',ses),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
+            epi       =  get_func_files(BIDS,sub_id,ses,run);
             epi_files =  spm_select('ExtFPlist', spm_file(epi,'path'), spm_file(spm_file(epi,'filename'),'prefix','^bra'),Inf);
             %extract_segment(epi_files,cm_file,epi_2_T1,c_files,[],thresh,ex_var);
             matlabbatch{gi,sub}.cfg_basicio.run_ops.call_matlab.inputs{1}.evaluated = epi_files;

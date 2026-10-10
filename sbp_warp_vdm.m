@@ -1,11 +1,15 @@
 function warp_images_vdm(all_sub_ids)
 % function warp_images
 % warps the skullstrip to the template space
-% also warps the mean EPI to the template space
+% also warps the mean EPI (cmean<P><epi>, P: see epi_prefix) to the template space. The result
+% (wcmean<P><epi>) is renamed to wmean<P><epi>, the name the nlin workflow produces too
 
 
 % resolve paths
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 
 n_subs        = length(all_sub_ids);
@@ -13,12 +17,10 @@ n_subs        = length(all_sub_ids);
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
     
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); % if there are more than 1
+    struc_file = get_anat(BIDS,sub_id);
     anat_dir   = spm_file(struc_file,'path');
 
-    epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        = epi(1); % if there are brain and spinal, just take brain
+    epi        = get_ref_epi(BIDS,sub_id);
     func_dir   = spm_file(epi,'path');
 
     strip_file  = fullfile(anat_dir, vars.skullStripID);
@@ -27,7 +29,7 @@ for sub = 1:n_subs
     c2_file     = spm_file(struc_file,'prefix','c2');
     u_rc1_file  = spm_file(struc_file,'prefix','u_rc1');
 
-    mean_file   = spm_file(epi,'prefix','cmeana'); % for vdm pipeline we need the vdm corrected and lin coreg mean as the y_epi_2_T1 is a 1:1 mapping
+    mean_file   = epi_file(epi,vars,'cmean'); % cmean<P><epi>: for vdm pipeline we need the vdm corrected and lin coreg mean as the y_epi_2_T1 is a 1:1 mapping
     mean_dir    = spm_file(mean_file,'path');
     
     flowfield_epi =  fullfile(func_dir,'y_epi_2_template.nii');
@@ -49,10 +51,10 @@ for sub = 1:n_subs
     matlabbatch{gi,sub}.spm.util.defs.out{1}.pull.prefix = 'w';
     gi = gi + 1;
     
-    matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = spm_file(mean_file,'prefix','w'); % it is now called wcmeana
+    matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.files = epi_file(epi,vars,'wcmean'); % it is now called wcmean<P><epi> (w + cmean<P><epi>) ...
     matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.moveto = mean_dir;
-    matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).pattern = 'wcmeana';
-    matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).repl = 'wmeana';
+    matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).pattern = '^.*$'; % ... the whole name is replaced by
+    matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.patrep(1).repl = char(spm_file(epi_file(epi,vars,'wmean'),'basename')); % wmean<P><epi>, the name the later steps (and the nlin workflow) use
     matlabbatch{gi,sub}.cfg_basicio.file_dir.file_ops.file_move.action.moveren.unique = false;
     gi = gi + 1;
 

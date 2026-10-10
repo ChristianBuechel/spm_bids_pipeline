@@ -24,10 +24,9 @@ for sub = 1:nSubs
         if nSess > 1
             fprintf('Analysing session %d now...\n',sess);
         end
-        for run = 1:nRuns
+        for run = get_run_numbers(BIDS,subIDs(sub),sess)
             %% extract time stamp from epi files
-            epi = spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'ses',sprintf('%02d',sess),'run',sprintf('%02d',run),'task',vars.task,'type','bold');
-            epi = epi(1); % if there are brain and spinal, just take brain
+            epi = get_func_files(BIDS,subIDs(sub),sess,run);
             V   = spm_vol(char(epi));
             nScans = [nScans size(V,1)];
             timeStampMRI{run} = datetime(V(1).descrip,'Format','dd/MM/yyyy HH:mm:ss');

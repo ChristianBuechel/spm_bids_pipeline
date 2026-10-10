@@ -14,13 +14,11 @@ allFiles            = [];
 
 for sub = 1:nSubs
     if whichFile == 1
-         anatFile   = spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'type','T1w');
-         anatFile   = anatFile(1); %in case there are more sessions with T1w
+         anatFile = get_anat(BIDS,subIDs(sub));
          anatDir    = spm_file(anatFile,'path');
          workFile   = char(fullfile(anatDir,spm_file(vars.skullStripID,'prefix','w')));
     elseif whichFile == 2
-        epi         = spm_BIDS(BIDS,'data','sub',sprintf('%02d',subIDs(sub)),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-        epi         = epi(1); % if there are brain and spinal, just take brain
+        epi         = get_ref_epi(BIDS,subIDs(sub));
         workFile    = char(spm_file(epi,'prefix','wmeana'));
     end
     allFiles   = [allFiles;workFile]; 

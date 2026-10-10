@@ -5,23 +5,24 @@ function create_trans_vdm(all_sub_ids)
 % mappings, but we keep to concept for simplicity
 
 % resolve paths
-[path,vars]  = get_study_specs;
+specs  = get_study_specs;
+path   = specs.path;
+vars   = specs.vars;
+
 BIDS         = spm_BIDS(path.preprocDir);
 n_subs       = length(all_sub_ids);
 
 for sub = 1:n_subs
     sub_id     = all_sub_ids(sub);
 
-    struc_file = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'type','T1w');
-    struc_file = struc_file(1); % if there are more than 1
+    struc_file = get_anat(BIDS,sub_id);
 
-    epi        = spm_BIDS(BIDS,'data','sub',sprintf('%02d',sub_id),'ses',sprintf('%02d',1),'run',sprintf('%02d',1),'task',vars.task,'type','bold');
-    epi        =  epi(1); % if there are brain and spinal, just take brain
+    epi        = get_ref_epi(BIDS,sub_id);
     func_dir   = spm_file(epi,'path');
 
     u_rc1_file      = spm_file(struc_file,'prefix','u_rc1');    
-    %mean_reg        = spm_file(epi,'prefix','meana'); 
-    mean_reg        = spm_file(epi,'prefix','cmeana'); % what does this do?
+    %mean_reg        = epi_file(epi,vars,'mean');
+    mean_reg        = epi_file(epi,vars,'cmean'); % what does this do? (not used, see comments below)
      
     %needs to be bigger?
     
