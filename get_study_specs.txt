@@ -23,7 +23,15 @@ function [path,vars,analysis,import,qc] = get_study_specs
     import.data(hh).seq        = 'ninEPI_bold_v12C, fmri '; %protocol name (trailing space makes it unique)
     import.data(hh).cond       = 'n > 180'; % heuristic to get only valid runs (e.g. more than 1000 volumes)
     hh = hh + 1;
-    
+
+    % optional field import.data(hh).task: task label if the series is NOT part of the
+    % main task (vars.task), e.g. short reference runs that are not preprocessed as fMRI:
+    %   import.data(hh).task   = 'vasoref';
+    % Run numbers are counted per task. Mag and phase series of one acquisition (from the
+    % DICOM header) share one run number and get part-mag / part-phase.
+    % A series is imported by the FIRST entry whose seq it contains and whose cond is true,
+    % series that match a seq but fail cond are listed as SKIPPED when importing.
+
     import.data(hh).dir        = 'anat'; % valid BIDS dir name
     import.data(hh).type       = 'T1w'; % valid BIDS file name
     import.data(hh).seq        = 'ninFLASH_v14A_df, mprage, defa-SAT_DEFA ';
@@ -61,9 +69,38 @@ function [path,vars,analysis,import,qc] = get_study_specs
     %% General settings
     
     vars.task        = 'task';
-    vars.nRuns       = 6; %
+    vars.acq_type    = {'brain'}; % what was acquired: {'brain'} (default), {'spinal'} or {'spinal','brain'}
+                                  % {'brain'}: no acq- tag, {'spinal'}: acq-spinal, {'spinal','brain'}: combined
+                                  % acquisition, acq-spinal / acq-brain (spinal = fewer slices, larger
+                                  % slice thickness/in-plane voxel size quotient)
+    % Which steps are run on the EPIs, in this order ('nordic', 'slicetiming', 'realign', 'smooth').
+    % Each step has a fixed output prefix (nordic 'n', slicetiming 'a', realign (reslicing) 'r', smooth 's')
+    % and SPM prepends it, so the images are called <last step><...><first step><name>, e.g. NORDIC and
+    % then slice timing --> 'an'. nordic / slicetiming come before 'realign', smooth after it. 'realign' can
+    % be left out (it is then put after the steps that are listed, before 'smooth').
+    % This decides which images the steps work on (see epi_steps, epi_prefix, epi_file):
+    %   {'slicetiming'}                    --> realign works on a<epi>, analysis on ra<epi>   (default if the field is missing)
+    %   {'nordic','realign'}               --> n<epi>, analysis on rn<epi>   (3D EPI: no slice timing)
+    %   {'nordic','slicetiming','realign'} --> an<epi>, analysis on ran<epi>
+    %   {'nordic','realign','smooth'}      --> n<epi>, rn<epi> (resliced, used for the noise regressors), analysis on srn<epi> (sbp_smooth)
+    %   {}                                 --> <epi>    (raw images, the realignment header is then stored next to them)
+    vars.preproc.steps = {'slicetiming','realign'};
+    % vars.smooth.fwhm = 1.5;  % kernel [mm] of sbp_smooth (scalar or 1x3), only used if 'smooth' is in the steps
+    % optional: override the input prefix of a single stage, e.g. vars.input_prefix.realign = 'n';
+    % NORDIC / vasoref (all optional):
+    % vars.ref_task              = 'vasoref'; % task label of the short VASO reference runs (sbp_vaso_T1)
+    % vars.nordic.vasoref_noisevols      = 'auto'; % noise volumes (no excitation) at the END of the vasoref series: 'auto' (detected,
+    %                                  % default) or a number. NORDIC splits them off (noise_<name>.nii/.json), n<name> has signal volumes only
+    % vars.nordic.func_noisevols = 'auto'; % same for the main runs (sbp_nordic). Runs without noise volumes use
+    %                                  % the noise level of the vasoref run of the same session (run sbp_vaso_T1 first)
+    % vars.nordic.ref_noise      = 1;  % 0: do not use the noise level of the vasoref run
+    vars.nRuns       = 6; % (preprocessing uses the runs that exist, see get_run_numbers)
     vars.nSess       = 1;
-    
+    % T1w averaging (sbp_average_T1, optional, run it before sbp_align_images):
+    % vars.nT1 = 2;                            % average the first nT1 T1w images (run-01 .. run-nT1) of each session
+    % vars.average_T1.across_sessions = 1;     % one T1w per session, several sessions: average run-01 of all sessions into ses-01 run-01
+    %                                          % (the T1w of the other sessions are not changed)
+
     % get info for slice timing correction MUST BE in ms
     vars.sliceTiming.so       = [1915, 1855, 1795, 1735, 1675, 1615, 1555, 1495, 1437.5, 1377.5, 1317.5, 1257.5, 1197.5, 1137.5, 1077.5, 1017.5, 957.5, 897.5, 837.5, 777.5, 717.5, 657.5, 597.5, 540, 480, 420, 360, 300, 240, 180, 120, 60, 0, ...
                                  1915, 1855, 1795, 1735, 1675, 1615, 1555, 1495, 1437.5, 1377.5, 1317.5, 1257.5, 1197.5, 1137.5, 1077.5, 1017.5, 957.5, 897.5, 837.5, 777.5, 717.5, 657.5, 597.5, 540, 480, 420, 360, 300, 240, 180, 120, 60, 0];

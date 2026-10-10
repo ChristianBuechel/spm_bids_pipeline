@@ -1,0 +1,8 @@
+# MATLAB autosave and local backups
+*.asv
+*.old
+*.bak
+# local test images
+test_T1/
+# not used by the code (vars.EPI is not referenced anywhere)
+templates/EPI.nii
