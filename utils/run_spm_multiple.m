@@ -9,6 +9,7 @@ mat_name          = which(mfilename);
 for np = 1:n_cores
     fname = [mat_name '_' num2str(np) '.mat'];
     matlabbatch = vec(loop_procs{np})';
+    matlabbatch = matlabbatch(~cellfun(@isempty,matlabbatch)); % subjects can have different numbers of jobs --> empty cells, which spm_jobman does not accept
     save(fname,'matlabbatch');
     [~, name_stem]      = fileparts(fname);
     name_stem_m         = [name_stem '.m'];

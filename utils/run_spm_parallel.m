@@ -7,12 +7,9 @@ if ~license('test', 'Distrib_Computing_Toolbox')
     run_spm_multiple(matlabbatch,n_cores); % starts multiple matlabs via system calls
 else
     start_pool_conditionally(n_cores);
+    n_cores = min(n_cores,size(matlabbatch,2));
     loop_procs = split_vect(matlabbatch,n_cores);
-    
-    spm_path = fileparts(which('spm'));
-    
     parfor worker = 1:n_cores
-        %for worker = 1:n_cores
         matlabbatch = vec(loop_procs{worker})';
         %save(sprintf('%d_test.mat',worker),'matlabbatch');
         do_one_batch(matlabbatch);
@@ -20,6 +17,7 @@ else
 end
 end
 function do_one_batch(input)
+input = input(~cellfun(@isempty,input)); % subjects can have different numbers of jobs --> empty cells, which spm_jobman does not accept
 spm('defaults','FMRI');
 spm_jobman('initcfg');
 spm_jobman('run', input);

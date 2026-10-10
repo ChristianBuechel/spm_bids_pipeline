@@ -5,8 +5,8 @@ pool = gcp('nocreate');
 
 if isempty(pool)
     pool = parpool(n_workers);
-elseif pool.NumWorkers ~= n_workers
-    fprintf('Wrong number of workers. Starting again.\n');
+elseif pool.NumWorkers < n_workers
+    fprintf('Not enough workers. Starting again.\n');
     delete(pool);
     pool = parpool(n_workers);
 else

@@ -10,6 +10,7 @@ for job = 1:size(loop_procs,2)
 end
 end
 function do_one_batch(input)
+input = input(~cellfun(@isempty,input)); % subjects can have different numbers of jobs --> empty cells, which spm_jobman does not accept
 spm('defaults','FMRI');
 spm_jobman('initcfg');
 spm_jobman('run', input);
